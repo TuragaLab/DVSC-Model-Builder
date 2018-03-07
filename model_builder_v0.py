@@ -5,10 +5,6 @@ from cv2 import split
 import known_synapse_signs
 from numpy import source
 import tools
-from sklearn.covariance.empirical_covariance_ import log_likelihood
-from scipy.sparse.linalg.isolve.tests.test_lsqr import normal
-from pycparser.c_ast import Assignment
-from known_cell_types import cell_remap
 matplotlib.rcParams['ps.useafm'] = True
 matplotlib.rcParams['pdf.use14corefonts'] = True
 matplotlib.rcParams['text.usetex'] = True
@@ -28,7 +24,6 @@ import hexspline
 import pickle
 import scipy
 import scipy.stats
-import scipy.optimize
 from joblib import Parallel, delayed
 import time
 from matplotlib.collections import PatchCollection
@@ -292,11 +287,8 @@ def update_normal_maps(cell_pairs, hex_to_hex_offsets, dataset_known_positions, 
                         if cell_pair[1] in dataset_known_positions[i].keys():
                             for tar_body in dataset_known_positions[i][cell_pair[1]]:
                                 if (tar_body[2][0] - src_body[2][0], tar_body[2][1] - src_body[2][1]) == offset:
-                                    if ((src_body[1], tar_body[1]) in sorted_synapses.keys()):
-                                        data.append(sorted_synapses[(src_body[1], tar_body[1])])
-                                    else:
-                                        data.append(0.0)
-
+                                    data.append(sorted_synapses[(src_body[1], tar_body[1])]) if ((src_body[1], tar_body[1]) in sorted_synapses.keys()) else data.append(0.0)
+                
             # At least 1 data sample needed to compute mu, std values
             if len(data) > 1:
                 mu, std = scipy.stats.norm.fit(np.asarray(data))
@@ -305,92 +297,71 @@ def update_normal_maps(cell_pairs, hex_to_hex_offsets, dataset_known_positions, 
                 normal_map[cell_pair][offset] = None
     return normal_map
     
-def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknown_positions, known_positions,\
+def update_assignment_picks(i, jsuk, hex_to_hex_offsets, normal_maps, unknown_positions, known_positions,\
                             sorted_synapses, cell_pairs, available_offsets):
     assignment_picks = []
-    for uk_type in uk_types:
+    for uk_type, j in jsuk:
+        uk_body = unknown_positions[uk_type][j]
         type_available_offsets = available_offsets[uk_type]
-        cost_matrix = np.zeros((len(unknown_positions[uk_type]),len(type_available_offsets)))
-        if not uk_type in unknown_positions.keys():
-            continue
-        for j in range(0, len(unknown_positions[uk_type])):
-            uk_body = unknown_positions[uk_type][j]
-            normalizer = 0.0
-            # Calculate probabilties for all free offsets
-            log_likelihood_per_offset = [None for offset in type_available_offsets]
-            for cell_pair in cell_pairs:
-                # Interaction: The source cell is of the same type as the unknown cell
-                if cell_pair[0] == uk_type:
-                    for k in range(0, len(known_positions[cell_pair[1]])):
-                        k_body = known_positions[cell_pair[1]][k]
-                        syn_key = (uk_body[1], k_body[1])
-                        if syn_key in sorted_synapses:
-                            for offset_index in range(0, len(type_available_offsets)):
-                                offset = type_available_offsets[offset_index]
-                                delta_offset = (offset[0]-k_body[2][0],offset[1]-k_body[2][1])
-                                if delta_offset in hex_to_hex_offsets:
-                                    dist = normal_maps[cell_pair][delta_offset]
-                                    l2_dist = np.linalg.norm(hexgrid_reference.hex_to_cartesian(delta_offset)) + 1.0
-                                    log_likelihood_per_offset[offset_index] = norm_lpdf(dist, sorted_synapses[syn_key], log_likelihood_per_offset[offset_index], min_prob=0.05*1.0/l2_dist)
-                    for k in range(0, len(unknown_positions[cell_pair[1]])):
-                        k_body = unknown_positions[cell_pair[1]][k]
-                        syn_key = (uk_body[1], k_body[1])
-                        if syn_key in sorted_synapses:
-                            for offset_index in range(0, len(type_available_offsets)):
-                                log_likelihood_per_offset[offset_index] = norm_lpdf(None, sorted_synapses[syn_key], log_likelihood_per_offset[offset_index], min_prob=0.001)
-                # Interaction: The target cell is of the same type as the unknown cell
-                elif cell_pair[1] == uk_type:
-                    for k in range(0, len(known_positions[cell_pair[0]])):
-                        k_body = known_positions[cell_pair[0]][k]
-                        syn_key = (k_body[1], uk_body[1])
-                        if syn_key in sorted_synapses:
-                            for offset_index in range(0, len(type_available_offsets)):
-                                offset = type_available_offsets[offset_index]
-                                delta_offset = (k_body[2][0]-offset[0],k_body[2][1]-offset[1])
-                                if delta_offset in hex_to_hex_offsets:
-                                    dist = normal_maps[cell_pair][delta_offset]
-                                    l2_dist = np.linalg.norm(hexgrid_reference.hex_to_cartesian(delta_offset)) + 1.0
-                                    log_likelihood_per_offset[offset_index] = norm_lpdf(dist, sorted_synapses[syn_key], log_likelihood_per_offset[offset_index], min_prob=0.05*1.0/l2_dist)
-                    for k in range(0, len(unknown_positions[cell_pair[0]])):
-                        k_body = unknown_positions[cell_pair[0]][k]
-                        syn_key = (k_body[1], uk_body[1])
-                        if syn_key in sorted_synapses:
-                            for offset_index in range(0, len(type_available_offsets)):
-                                log_likelihood_per_offset[offset_index] = norm_lpdf(None, sorted_synapses[syn_key], log_likelihood_per_offset[offset_index], min_prob=0.001)
+        assignment_pick = None
+        normalizer = 0.0
+        # Calculate probabilties for all free offsets
+        log_likelihood_per_offset = [None for offset in type_available_offsets]
+        known_neighbors = 0
+        unknown_neighbors = 0
+        for cell_pair in cell_pairs:
+            # Interaction: The source cell is of the same type as the unknown cell
+            if cell_pair[0] == uk_type:
+                for k in range(0, len(known_positions[cell_pair[1]])):
+                    k_body = known_positions[cell_pair[1]][k]
+                    syn_key = (uk_body[1], k_body[1])
+                    if syn_key in sorted_synapses:
+                        known_neighbors += 1
+                        for offset_index in range(0, len(type_available_offsets)):
+                            offset = type_available_offsets[offset_index]
+                            delta_offset = (offset[0]-k_body[2][0],offset[1]-k_body[2][1])
+                            if delta_offset in hex_to_hex_offsets:
+                                dist = normal_maps[cell_pair][delta_offset]
+                                l2_dist = np.linalg.norm(hexgrid_reference.hex_to_cartesian(delta_offset)) + 1.0
+                                log_likelihood_per_offset[offset_index] = norm_lpdf(dist, sorted_synapses[syn_key], log_likelihood_per_offset[offset_index], min_prob=0.05*1.0/l2_dist)
+                for k in range(0, len(unknown_positions[cell_pair[1]])):
+                    k_body = unknown_positions[cell_pair[1]][k]
+                    syn_key = (uk_body[1], k_body[1])
+                    if syn_key in sorted_synapses:
+                        unknown_neighbors += 1
+                        for offset_index in range(0, len(type_available_offsets)):
+                            log_likelihood_per_offset[offset_index] = norm_lpdf(None, sorted_synapses[syn_key], log_likelihood_per_offset[offset_index], min_prob=0.001)
+            # Interaction: The target cell is of the same type as the unknown cell
+            elif cell_pair[1] == uk_type:
+                for k in range(0, len(known_positions[cell_pair[0]])):
+                    k_body = known_positions[cell_pair[0]][k]
+                    syn_key = (k_body[1], uk_body[1])
+                    if syn_key in sorted_synapses:
+                        known_neighbors += 1
+                        for offset_index in range(0, len(type_available_offsets)):
+                            offset = type_available_offsets[offset_index]
+                            delta_offset = (k_body[2][0]-offset[0],k_body[2][1]-offset[1])
+                            if delta_offset in hex_to_hex_offsets:
+                                dist = normal_maps[cell_pair][delta_offset]
+                                l2_dist = np.linalg.norm(hexgrid_reference.hex_to_cartesian(delta_offset)) + 1.0
+                                log_likelihood_per_offset[offset_index] = norm_lpdf(dist, sorted_synapses[syn_key], log_likelihood_per_offset[offset_index], min_prob=0.05*1.0/l2_dist)
+                for k in range(0, len(unknown_positions[cell_pair[0]])):
+                    k_body = unknown_positions[cell_pair[0]][k]
+                    syn_key = (k_body[1], uk_body[1])
+                    if syn_key in sorted_synapses:
+                        unknown_neighbors += 1
+                        for offset_index in range(0, len(type_available_offsets)):
+                            log_likelihood_per_offset[offset_index] = norm_lpdf(None, sorted_synapses[syn_key], log_likelihood_per_offset[offset_index], min_prob=0.001)
         
-            for offset_index in range(0, len(type_available_offsets)):
-                log_likelihood = log_likelihood_per_offset[offset_index]
-                if not (log_likelihood == None):
-                    normalizer = normalizer + math.exp(log_likelihood)
-
-            for offset_index in range(0, len(type_available_offsets)):
-                log_likelihood = log_likelihood_per_offset[offset_index]
-                if not (log_likelihood == None):
-                    cost_matrix[j, offset_index] = (1.0 - math.exp(log_likelihood)/normalizer) if (not normalizer == 0.0) else 0.0
-                else:
-                    cost_matrix[j, offset_index] = 1.0
-                    
-        if (len(unknown_positions[uk_type])) > 0:
-            row_ind, col_ind = scipy.optimize.linear_sum_assignment(cost_matrix)
-            assignment_matrix = np.zeros(cost_matrix.shape)
-            assignment_matrix[row_ind, col_ind] = 1.0
-            
-            cost_assignment_matrix = np.multiply(assignment_matrix, cost_matrix)
-            
-            cost_per_body = np.sum(cost_assignment_matrix,axis=1)
-            pick_j_val = None
-            pick_j = None
-            for j in range(0,len(unknown_positions[uk_type])):
-                if pick_j_val == None or pick_j_val > cost_per_body[j]:
-                    pick_j_val = cost_per_body[j]
-                    pick_j = j
-
-            total_cost = np.sum(cost_per_body)/len(unknown_positions[uk_type])
-                        
-            for j in range(0, len(unknown_positions[uk_type])):
-                assignment_pick = ((1.0/total_cost) if j == pick_j else 0.0, i, uk_type, unknown_positions[uk_type][j][0], unknown_positions[uk_type][j][1], type_available_offsets[offset_index])
-                assignment_picks.append(assignment_pick)
-            
+        for offset_index in range(0, len(type_available_offsets)):
+            log_likelihood = log_likelihood_per_offset[offset_index]
+            if not (log_likelihood == None):
+                normalizer = normalizer + math.exp(log_likelihood)
+                if assignment_pick == None or math.exp(log_likelihood) > assignment_pick[0]:
+                    assignment_pick = (math.exp(log_likelihood), i, uk_type, uk_body[0], uk_body[1], type_available_offsets[offset_index], known_neighbors, unknown_neighbors)
+        if not assignment_pick == None:
+            probability = assignment_pick[0]/normalizer if normalizer > 0.0 else 0.0
+            assignment_picks.append((probability, assignment_pick[1], assignment_pick[2], assignment_pick[3], assignment_pick[4], assignment_pick[5], assignment_pick[6], assignment_pick[7]))
     return assignment_picks
 
 def optimize_neuron_positions(dataset_bodies, dataset_synapses, output_name, n_threads=16):    
@@ -414,29 +385,21 @@ def optimize_neuron_positions(dataset_bodies, dataset_synapses, output_name, n_t
         dataset_available_offsets.append(dict())
         for body_key in list(bodies.keys()):
             body = bodies[body_key]
-            body_cell_types = [body[0]]
-            if body_cell_types[0] in known_cell_types.cell_remap.keys():
-                body_cell_types = []
-                for body_cell_type in list(known_cell_types.cell_remap.keys()):
-                    body_cell_types.append(body_cell_type)
-            # Remap cells which have an unsure type to the possible types it could be
-            for body_cell_type in body_cell_types:
-                if not body_cell_type in dataset_available_offsets[i].keys():
-                    dataset_available_offsets[i][body_cell_type] = [offset for offset in hex_offsets]
-                if not body_cell_type in sub_known_positions:
-                    sub_known_positions[body_cell_type] = []
-                if not body_cell_type in sub_unknown_positions:
-                    sub_unknown_positions[body_cell_type] = []
-                if body[1] == None or len(body_cell_types) > 1:
-                    # Either unknown position or known position but more than one possible cell type
-                    sub_unknown_positions[body_cell_type].append((index, body_key))
-                else:
-                    sub_known_positions[body_cell_type].append((index, body_key, body[1]))
-                    # Offset no longer available
-                    try:
-                        dataset_available_offsets[i][body_cell_type].remove(body[1])
-                    except:
-                        print("Double allocation of offset: ", body[1], body_cell_type)
+            if not body[0] in dataset_available_offsets[i].keys():
+                dataset_available_offsets[i][body[0]] = [offset for offset in hex_offsets]
+            if not body[0] in sub_known_positions:
+                sub_known_positions[body[0]] = []
+            if not body[0] in sub_unknown_positions:
+                sub_unknown_positions[body[0]] = []
+            if body[1] == None:
+                sub_unknown_positions[body[0]].append((index, body_key))
+            else:
+                sub_known_positions[body[0]].append((index, body_key, body[1]))
+                # Offset no longer available
+                try:
+                    dataset_available_offsets[i][body[0]].remove(body[1])
+                except:
+                    print("Double allocation of offset: ", body[1], body[0])
             index = index + 1   
         dataset_known_positions.append(sub_known_positions) 
         dataset_unknown_positions.append(sub_unknown_positions) 
@@ -495,16 +458,16 @@ def optimize_neuron_positions(dataset_bodies, dataset_synapses, output_name, n_t
             # Loop over all datasets
             for i in range(0, len(dataset_unknown_positions)):
                 # Loop over all cells with unknown positions
-                uk_types = []
+                jsuks = []
                 for uk_type in dataset_unknown_positions[i].keys():
                     if uk_type in cell_types_need_update:
-                        uk_types.append(uk_type)
+                        jsuks = jsuks + [(uk_type, j) for j in range(0, len(dataset_unknown_positions[i][uk_type]))]
                     
-                assignment_picks_updates = parallel(delayed(update_assignment_picks)(i, uk_per_thread_types, hex_to_hex_offsets,\
+                assignment_picks_updates = parallel(delayed(update_assignment_picks)(i, jsuk, hex_to_hex_offsets,\
                                                                                      normal_maps, dataset_unknown_positions[i],\
                                                                                      dataset_known_positions[i], dataset_sorted_synapses[i],\
                                                                                      dataset_cell_pairs[i], dataset_available_offsets[i])\
-                                                    for uk_per_thread_types in tools.split(uk_types, n_threads))
+                                                    for jsuk in tools.split(jsuks, n_threads))
                 for assignment_picks_update in assignment_picks_updates:
                     for assignment_pick in assignment_picks_update:
                         if not assignment_pick == None:
@@ -526,12 +489,6 @@ def optimize_neuron_positions(dataset_bodies, dataset_synapses, output_name, n_t
             # Body now has a known position
             dataset_available_offsets[assignment_pick[1]][assignment_pick[2]].remove(assignment_pick[5])
             dataset_unknown_positions[assignment_pick[1]][assignment_pick[2]].remove((assignment_pick[3], assignment_pick[4]))
-            # Remove other unknown positions carrying the same index and cell ID:
-            for cell_type in list(dataset_unknown_positions[assignment_pick[1]].keys()):
-                try:
-                    dataset_unknown_positions[assignment_pick[1]][cell_type].remove((assignment_pick[3], assignment_pick[4]))
-                except:
-                    pass
             dataset_known_positions[assignment_pick[1]][assignment_pick[2]].append((assignment_pick[3], assignment_pick[4], assignment_pick[5]))
             assignment_picks.remove(assignment_pick)
             

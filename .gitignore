@@ -102,5 +102,6 @@ ENV/
 
 # Custom
 output
+output_v*
 .project
 .pydevproject

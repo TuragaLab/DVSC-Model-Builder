@@ -12,7 +12,7 @@ def main():
     dataset_bodies, dataset_synapses = model_builder.parse_datasets_to_model(datasets)
         
     # Optimize
-    # model_builder.optimize_neuron_positions(dataset_bodies, dataset_synapses, 'output/optimized_cell_positions_2.pickle')
+    model_builder.optimize_neuron_positions(dataset_bodies, dataset_synapses, 'output/optimized_cell_positions_2.pickle')
 
     # Generate graphics
     # optimization_visualization.plot_normal_map_results('output/optimized_cell_positions_benchmark_0.pickle', 'output/optimizer/',
@@ -20,8 +20,8 @@ def main():
     # optimization_visualization.plot_cell_map_results('output/optimized_cell_positions_benchmark_0.pickle', 'output/optimizer/',
     #                                                  dataset_bodies, [datasets[0][3], datasets[1][3]])
 
-    synapse_position_visualization.plot_synapse_positions('output/optimized_cell_positions_benchmark_0.pickle', 'output/optimizer/',
-                                                          [dataset_bodies[0]],[dataset_synapses[0]],[datasets[0][3]])
+    # synapse_position_visualization.plot_synapse_positions('output/optimized_cell_positions_benchmark_0.pickle', 'output/optimizer/',
+    #                                                       [dataset_bodies[0]],[dataset_synapses[0]],[datasets[0][3]])
 
 
 if __name__ == "__main__":

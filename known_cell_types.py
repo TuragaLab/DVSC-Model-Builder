@@ -117,18 +117,25 @@ cells.append('T5b')
 cells.append('T5c')
 cells.append('T5d')
 
+# Cells with an alias instead of their real name that have to be converted to their real name
 cell_alias = dict()
-cell_alias['Tm6/14'] = 'Tm6'
-cell_alias['Tm23/24'] = 'Tm23'
-cell_alias['Tm25/Y1'] = 'Tm25'
-cell_alias['Tm28/TmY9'] = 'Tm28'
-cell_alias['Tm4?'] = 'Tm4'
-cell_alias['Pm5/Mt5'] = 'Pm5'
-cell_alias['Pm5/Mt5'] = 'Pm5'
 cell_alias['TmY16?'] = 'TmY16'
+cell_alias['Tm4?'] = 'Tm4'
 cell_alias['TmY17?'] = 'TmY17'
 cell_alias['Dm10??'] = 'Dm10'
 
+# Cells that have an unsure type and need to be remapped to a set of possible cells
+cell_remap = dict()
+cell_remap['Tm6/14'] = ['Tm6', 'Tm14']
+cell_remap['Tm23/24'] = ['Tm23', 'Tm24']
+cell_remap['Tm25/Y1'] = ['Tm25', 'TmY1']
+cell_remap['Tm28/TmY9'] = ['Tm28', 'TmY9']
+cell_remap['Pm5/Mt5'] = ['Pm5', 'Mt5']
+cell_remap['Pm5/Mt5'] = ['Pm5', 'Mt5']
+cell_remap['Tm3'] = ['Tm3-ant', 'Tm3-post']
+cell_remap['Tm4'] = ['Tm4-ant', 'Tm4-post']
+
+# Some cells come in anterior/posterior pairs, which we interpret as two different cell types
 cell_modifiers = dict()
 cell_modifiers['ant'] = '-ant'
 cell_modifiers['post'] = '-post'
