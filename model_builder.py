@@ -365,8 +365,8 @@ def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknow
 
             for offset_index in range(0, len(type_available_offsets)):
                 log_likelihood = log_likelihood_per_offset[offset_index]
-                if not (log_likelihood == None):
-                    cost_matrix[j, offset_index] = (1.0 - math.exp(log_likelihood)/normalizer) if (not normalizer == 0.0) else 0.0
+                if not (log_likelihood == None or normalizer == 0.0):
+                    cost_matrix[j, offset_index] = (1.0 - math.exp(log_likelihood)/normalizer)
                 else:
                     cost_matrix[j, offset_index] = 1.0
                     
@@ -380,10 +380,12 @@ def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknow
             cost_per_body = np.sum(cost_assignment_matrix,axis=1)
             pick_j_val = None
             pick_j = None
-            for j in range(0,len(unknown_positions[uk_type])):
+            offset_index = None
+            for j in range(0, len(unknown_positions[uk_type])):
                 if pick_j_val == None or pick_j_val > cost_per_body[j]:
                     pick_j_val = cost_per_body[j]
                     pick_j = j
+                    offset_index = col_ind[j]
 
             total_cost = np.sum(cost_per_body)/len(unknown_positions[uk_type])
                         
