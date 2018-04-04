@@ -5,7 +5,7 @@ import pickle
 from joblib import Parallel, delayed
 import hexgrid_reference
 import tools
-import model_builder
+import model_builder_v1
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import scale
@@ -141,7 +141,7 @@ def plot_synapse_positions(input_name, output_path, dataset_bodies, dataset_syna
             
             fig.canvas.draw()
             plt.gca().invert_yaxis()   
-            plt.savefig(output_path+dataset_names[i]+'_'+str(cell_type)+'_synsc.pdf', bbox_inches='tight')
+            plt.savefig(output_path+tools.filename_strip(dataset_names[i]+'_'+str(cell_type))+'_synsc.pdf', bbox_inches='tight')
             
             # plt.show()
             # plt.pause(1)

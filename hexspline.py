@@ -1,5 +1,6 @@
 import matplotlib
 import hexgrid_reference
+import tools
 matplotlib.rcParams['ps.useafm'] = True
 matplotlib.rcParams['pdf.use14corefonts'] = True
 matplotlib.rcParams['text.usetex'] = True
@@ -374,8 +375,8 @@ def plot_optimization_results(input_name, output_path):
             plt.draw()
             plt.pause(0.01)
             fig = plt.gcf()
-            fig.savefig(output_path+str(sel_dataset)+'_'+body_key+'.eps', format='eps')
-            fig.savefig(output_path+str(sel_dataset)+'_'+body_key+'.png', format='png')
+            fig.savefig(output_path+tools.filename_strip(str(sel_dataset)+'_'+body_key)+'.eps', format='eps')
+            fig.savefig(output_path+tools.filename_strip(str(sel_dataset)+'_'+body_key)+'.png', format='png')
     
     ph_batch_cell_pair_vals = tf.placeholder(tf.float32, shape=(1,len(hex_offsets)))
         
@@ -398,8 +399,8 @@ def plot_optimization_results(input_name, output_path):
             plt.draw()
             plt.pause(0.01)
             fig = plt.gcf()
-            fig.savefig(output_path+str(cell_pair_key)+'.eps', format='eps')
-            fig.savefig(output_path+str(cell_pair_key)+'.png', format='png')
+            fig.savefig(output_path+tools.filename_strip(str(cell_pair_key))+'.eps', format='eps')
+            fig.savefig(output_path+tools.filename_strip(str(cell_pair_key))+'.png', format='png')
 
 
 # Demo/testing

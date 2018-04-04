@@ -31,3 +31,6 @@ def cmap_map(function, cmap):
         cdict[key] = colorvector
 
     return matplotlib.colors.LinearSegmentedColormap('colormap',cdict,1024)
+
+def jetcolor_to_rgb(color):
+    return ((int)(color[0] * 255.0),(int)(color[1] * 255.0),(int)(color[2] * 255.0))

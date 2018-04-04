@@ -1,6 +1,7 @@
 import model_builder
 import optimization_visualization
 import synapse_position_visualization
+import model_template_v0
 
 def main():
     datasets = []
@@ -12,7 +13,7 @@ def main():
     dataset_bodies, dataset_synapses = model_builder.parse_datasets_to_model(datasets)
         
     # Optimize
-    model_builder.optimize_neuron_positions(dataset_bodies, dataset_synapses, 'output/optimized_cell_positions_2.pickle')
+    # model_builder_v1.optimize_neuron_positions(dataset_bodies, dataset_synapses, 'output/optimized_cell_positions_2.pickle')
 
     # Generate graphics
     # optimization_visualization.plot_normal_map_results('output/optimized_cell_positions_benchmark_0.pickle', 'output/optimizer/',
@@ -23,6 +24,15 @@ def main():
     # synapse_position_visualization.plot_synapse_positions('output/optimized_cell_positions_benchmark_0.pickle', 'output/optimizer/',
     #                                                       [dataset_bodies[0]],[dataset_synapses[0]],[datasets[0][3]])
 
+
+    # Generate model
+    nodes, edges, input_units, output_units = model_builder.generate_dvsc_model(
+        model_template_v0.nodes, model_template_v0.edges, model_template_v0.input_units, model_template_v0.output_units,
+        'output/optimized_cell_positions_benchmark_0.pickle', dataset_bodies, dataset_synapses,
+        datasets_for_pattern=[0,1], datasets_for_model=[0])
+
+    model_builder.write_dvsc_model(True, 'output/model.pickle', nodes, edges, input_units, output_units)
+    model_builder.write_dvsc_model(False, 'output/model.py', nodes, edges, input_units, output_units)
 
 if __name__ == "__main__":
     main()

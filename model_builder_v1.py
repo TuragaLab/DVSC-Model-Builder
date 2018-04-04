@@ -5,10 +5,10 @@ from cv2 import split
 import known_synapse_signs
 from numpy import source
 import tools
+from sklearn.covariance.empirical_covariance_ import log_likelihood
 from scipy.sparse.linalg.isolve.tests.test_lsqr import normal
 from pycparser.c_ast import Assignment
 from known_cell_types import cell_remap
-import known_neuron_patterns
 matplotlib.rcParams['ps.useafm'] = True
 matplotlib.rcParams['pdf.use14corefonts'] = True
 matplotlib.rcParams['text.usetex'] = True
@@ -208,6 +208,8 @@ def parse_datasets_to_model(datasets):
     unknown_bodies_file = open('output/unknown_bodies.txt', 'w')
     unknown_offsets_file = open('output/unknown_offsets.txt', 'w')
     
+    total_synapses = []
+    body_pattern = dict()
     dataset_bodies = []
     dataset_synapses = []
     dataset_body_offsets = []
@@ -253,8 +255,8 @@ def parse_datasets_to_model(datasets):
     unknown_offsets_file.close()
     return dataset_bodies, dataset_synapses
 
-# Returns the updated evidence with the normal distribution with a 5% cutoff
-def norm_lpdf(dist, x, evidence, min_prob=0.05):
+# Returns the updated log-likelihood with the normal distribution with a 5% cutoff
+def norm_lpdf(dist, x, log_likelihood, min_prob=math.sqrt(5)):
     val = None
     if dist == None:
         # 5% probability lower cutoff
@@ -264,17 +266,17 @@ def norm_lpdf(dist, x, evidence, min_prob=0.05):
         val = scipy.stats.norm(dist[0],dist[1]).pdf(x)
     elif dist[1] == 0.0 and dist[0] - x == 0.0:
         # No variance: Only perfect match gives 100% score
-        val = 1.0
+        val = math.log(1.0)
     else:
         # Probability lower cutoff
         val = min_prob
         
     val = max(min_prob, val)
         
-    if evidence == None:
-        return val
+    if log_likelihood == None:
+        return math.log(val)
     else:
-        return evidence + val
+        return log_likelihood + math.log(val)
 
 def update_normal_maps(cell_pairs, hex_to_hex_offsets, dataset_known_positions, dataset_sorted_synapses):
     normal_map = dict()
@@ -315,7 +317,7 @@ def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknow
             uk_body = unknown_positions[uk_type][j]
             normalizer = 0.0
             # Calculate probabilties for all free offsets
-            evidence_per_offset = [None for offset in type_available_offsets]
+            log_likelihood_per_offset = [None for offset in type_available_offsets]
             for cell_pair in cell_pairs:
                 # Interaction: The source cell is of the same type as the unknown cell
                 if cell_pair[0] == uk_type:
@@ -329,13 +331,13 @@ def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknow
                                 if delta_offset in hex_to_hex_offsets:
                                     dist = normal_maps[cell_pair][delta_offset]
                                     l2_dist = np.linalg.norm(hexgrid_reference.hex_to_cartesian(delta_offset)) + 1.0
-                                    evidence_per_offset[offset_index] = norm_lpdf(dist, sorted_synapses[syn_key], evidence_per_offset[offset_index], min_prob=0.05*1.0/l2_dist)
+                                    log_likelihood_per_offset[offset_index] = norm_lpdf(dist, sorted_synapses[syn_key], log_likelihood_per_offset[offset_index], min_prob=0.05*1.0/l2_dist)
                     for k in range(0, len(unknown_positions[cell_pair[1]])):
                         k_body = unknown_positions[cell_pair[1]][k]
                         syn_key = (uk_body[1], k_body[1])
                         if syn_key in sorted_synapses:
                             for offset_index in range(0, len(type_available_offsets)):
-                                evidence_per_offset[offset_index] = norm_lpdf(None, sorted_synapses[syn_key], evidence_per_offset[offset_index], min_prob=0.05)
+                                log_likelihood_per_offset[offset_index] = norm_lpdf(None, sorted_synapses[syn_key], log_likelihood_per_offset[offset_index], min_prob=0.001)
                 # Interaction: The target cell is of the same type as the unknown cell
                 elif cell_pair[1] == uk_type:
                     for k in range(0, len(known_positions[cell_pair[0]])):
@@ -348,23 +350,23 @@ def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknow
                                 if delta_offset in hex_to_hex_offsets:
                                     dist = normal_maps[cell_pair][delta_offset]
                                     l2_dist = np.linalg.norm(hexgrid_reference.hex_to_cartesian(delta_offset)) + 1.0
-                                    evidence_per_offset[offset_index] = norm_lpdf(dist, sorted_synapses[syn_key], evidence_per_offset[offset_index], min_prob=0.05*1.0/l2_dist)
+                                    log_likelihood_per_offset[offset_index] = norm_lpdf(dist, sorted_synapses[syn_key], log_likelihood_per_offset[offset_index], min_prob=0.05*1.0/l2_dist)
                     for k in range(0, len(unknown_positions[cell_pair[0]])):
                         k_body = unknown_positions[cell_pair[0]][k]
                         syn_key = (k_body[1], uk_body[1])
                         if syn_key in sorted_synapses:
                             for offset_index in range(0, len(type_available_offsets)):
-                                evidence_per_offset[offset_index] = norm_lpdf(None, sorted_synapses[syn_key], evidence_per_offset[offset_index], min_prob=0.001)
+                                log_likelihood_per_offset[offset_index] = norm_lpdf(None, sorted_synapses[syn_key], log_likelihood_per_offset[offset_index], min_prob=0.001)
         
             for offset_index in range(0, len(type_available_offsets)):
-                evidence = evidence_per_offset[offset_index]
-                if not (evidence == None):
-                    normalizer = normalizer + evidence
+                log_likelihood = log_likelihood_per_offset[offset_index]
+                if not (log_likelihood == None):
+                    normalizer = normalizer + math.exp(log_likelihood)
 
             for offset_index in range(0, len(type_available_offsets)):
-                evidence = evidence_per_offset[offset_index]
-                if not (evidence == None or normalizer == 0.0):
-                    cost_matrix[j, offset_index] = (1.0 - evidence/normalizer)
+                log_likelihood = log_likelihood_per_offset[offset_index]
+                if not (log_likelihood == None or normalizer == 0.0):
+                    cost_matrix[j, offset_index] = (1.0 - math.exp(log_likelihood)/normalizer)
                 else:
                     cost_matrix[j, offset_index] = 1.0
                     
@@ -574,178 +576,4 @@ def write_dvsc_compat(nodes, edges):
     text = text + '    return nodes, edges, input_units, output_units\n'
     file.write(text)
     file.close()
-    
-    
-def get_node_pattern(cell_type, dataset_known_positions):
-    allocated_offsets = [dict() for i in range(0, len(dataset_known_positions))]
-    for i in range(0, len(dataset_known_positions)):
-        known_positions = dataset_known_positions[i]
-        for known_position in known_positions:
-            allocated_offsets[i][known_position[2]] = 1 + (0 if (not known_position[2] in allocated_offsets[i].keys()) else allocated_offsets[i][known_position[2]])
-    # TODO: Find a way to get the real pattern. Data seems insufficient to dedict that at the moment
-    # Assume, for now, all cells are synperiodic/columnar
-    return ('stride', (1, 1)) if not cell_type in known_neuron_patterns.known_neuron_patterns.keys() else known_neuron_patterns.known_neuron_patterns[cell_type]
-    
-    
-def generate_dvsc_model(template_nodes, template_edges, template_input_units, template_output_units,
-                        input_name, dataset_bodies, dataset_synapses,
-                        datasets_for_pattern=[0], datasets_for_model=[0],
-                        n_threads=32):
-    
-    # Copy from templates
-    nodes = copy.deepcopy(template_nodes) if not template_nodes == None else []
-    edges = copy.deepcopy(template_edges) if not template_edges == None else []
-    input_units = copy.deepcopy(template_input_units) if not template_input_units == None else []
-    output_units = copy.deepcopy(template_output_units) if not template_output_units == None else []
 
-    dataset_known_positions, normal_maps = pickle.load(open(input_name, 'rb'))
-    
-    cell_patterns = dict()
-    cell_types = set()
-    for known_positions in dataset_known_positions:
-        for cell_type in list(known_positions.keys()):
-            if len(known_positions[cell_type]) > 0:
-                cell_types.add(cell_type)
-   
-    for cell_type in list(cell_types):
-        cell_patterns[cell_type] = get_node_pattern(cell_type, [dataset_known_positions[i][cell_type] if cell_type in dataset_known_positions[i].keys() else [] for i in datasets_for_pattern])
-    
-    for known_positions in [dataset_known_positions[i] for i in datasets_for_model]:
-        for cell_type in list(known_positions.keys()):
-            if len(known_positions[cell_type]) > 0:
-                found = False
-                for node in nodes:
-                    if node[0] == cell_type:
-                        found = True
-                if not found:
-                    nodes.append((cell_type, cell_patterns[cell_type], 'relu', 1.0))
-        
-    hex_offsets = hexgrid_reference.hex_area(6)
-    hex_to_hex_offsets = set()
-    for hex_offset_1 in hex_offsets:
-        for hex_offset_2 in hex_offsets:
-            hex_to_hex_offsets.add((hex_offset_2[1]-hex_offset_1[1],hex_offset_2[0]-hex_offset_1[0]))
-            
-    dataset_sorted_synapses = []
-    for i in range(0, len(dataset_synapses)):
-        sorted_synapses = dict()
-        synapses = dataset_synapses[i]
-        for synapse_key in list(synapses.keys()):
-            for synapse_pair in synapses[synapse_key]:
-                sorted_synapses[(synapse_pair[0], synapse_pair[1])] = float(synapse_pair[2])
-        dataset_sorted_synapses.append(sorted_synapses)
-    
-    dataset_cell_pairs = []
-    cell_pairs = []
-    for synapses in dataset_synapses:
-        set_cell_pairs = []
-        for synapse_key in list(synapses.keys()):
-            if not synapse_key in cell_pairs:
-                cell_pairs.append(synapse_key)
-            if not synapse_key in set_cell_pairs:
-                set_cell_pairs.append(synapse_key)
-            set_cell_pairs.sort()
-        dataset_cell_pairs.append(set_cell_pairs)
-    cell_pairs.sort()
-    
-    with Parallel(n_jobs=n_threads) as parallel:
-        normal_maps = dict()
-        norm_maps_updates = parallel(delayed(update_normal_maps)(sub_cell_pairs, hex_to_hex_offsets,
-                                     [dataset_known_positions[j] for j in datasets_for_model],
-                                     [dataset_sorted_synapses[j] for j in datasets_for_model]) \
-                                     for sub_cell_pairs in tools.split(cell_pairs, n_threads))
-        for norm_maps_update in norm_maps_updates:
-            for update_key in norm_maps_update.keys():
-                normal_maps[update_key] = norm_maps_update[update_key]
-        
-    avg_lmbd = 0.0
-    avg_count = 0
-    temp_edges = []
-    for normal_map_key in list(normal_maps.keys()):
-        normal_map = normal_maps[normal_map_key]
-        cv = 0.0
-        count = 0
-        edge_offsets = []
-        for offset in list(normal_map.keys()):
-            if (not normal_map[offset] == None):
-                mu, sigma = normal_map[offset]
-                cv = cv + sigma/mu
-                count = count + 1
-                edge_offsets.append((offset, mu))
-        
-        # Clamp lambda values
-        lmbd = None
-        if count > 0 and cv/float(count) > 0.0:
-            lmbd = max(min(1.0/(cv/float(count)), 1e6), 0.0)
-            avg_lmbd = avg_lmbd + lmbd
-            avg_count = avg_count + 1
-
-        if count > 0:
-            temp_edges.append((normal_map_key[0], normal_map_key[1], edge_offsets,
-                               known_synapse_signs.get_sign(normal_map_key[0], normal_map_key[1]),
-                               lmbd))
-          
-    avg_lmbd = avg_lmbd / float(avg_count)
-    
-    # Rewrite edges, add lambda if necessary (< 3 observations and cv > 0.0)
-    for i in range(0, len(temp_edges)):
-        temp_edges[i] = (temp_edges[i][0], temp_edges[i][1], temp_edges[i][2],
-                         temp_edges[i][3], avg_lmbd if temp_edges[i][4] == None else temp_edges[i][4])
-    
-    # Rewrite template edges with new alpha and lambda
-    for i in range(0, len(edges)):
-        edges[i] = (edges[i][0], edges[i][1], edges[i][2],
-                    known_synapse_signs.get_sign(edges[i][0], edges[i][1]),
-                    avg_lmbd)
-    
-    for temp_edge in temp_edges:
-        found = False
-        for edge in edges:
-            if (temp_edge[0] == edge[0] and temp_edge[1] == edge[1]):
-                found = True
-        if found == False:
-            edges.append(temp_edge)
-
-    return nodes, edges, input_units, output_units
-    
-# Create the DVSC specification for the new simulation
-def write_dvsc_model(output_pickle, output_name, nodes, edges, input_units, output_units):
-    if (output_pickle):
-        # Pickle serialize
-        pickle.dump((nodes, edges, input_units, output_units), open(output_name, 'wb'), pickle.HIGHEST_PROTOCOL)
-    else:
-        # Text serialize to active python code
-        file = open(output_name, 'w')
-        text = '# Python active code serialized model\n'
-        text = text + '################################################################################\n'
-        text = text + '# Input units\n'
-        text = text + 'input_units = ['
-        for i in range(0, len(input_units)):
-            text = text + input_units[i]
-            if i < len(input_units)-1:
-                text = text + ', '
-        text = text + ']\n'
-        
-        text = text + '################################################################################\n'
-        text = text + '# Output units\n'
-        text = text +'output_units = ['
-        for i in range(0, len(output_units)):
-            text = text + output_units[i]
-            if i < len(output_units)-1:
-                text = text + ', '
-        text = text + ']\n'
-        
-        text = text + '################################################################################\n'
-        text = text + '# Nodes\n'
-        text = text + 'nodes = []\n'
-        for node in nodes:
-            text = text + 'nodes.append(' + str(node) + ')\n'
-        
-        text = text + '################################################################################\n'
-        text = text + '# Edges\n'
-        text = text + 'edges = []\n'
-        for edge in edges:
-            text = text + 'edges.append(' + str(edge) + ')\n'
-            
-        file.write(text)
-        file.close()

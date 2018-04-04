@@ -93,7 +93,7 @@ def plot_normal_map_parallel(normal_map_keys, normal_maps, cartesian_micrometers
         scatter.set_sizes(size_pt)
         plt.gca().invert_yaxis()
         
-        plt.savefig(output_path+dataset_name+str(normal_map_key)+'.pdf', bbox_inches='tight')
+        plt.savefig(output_path+tools.filename_strip(dataset_name+str(normal_map_key))+'.pdf', bbox_inches='tight')
         plt.cla()
         plt.clf()
         plt.close()
@@ -250,7 +250,7 @@ def plot_cell_map_parallel(cell_types, dataset_known_positions, hex_offsets, car
 
         fig.canvas.draw()
         plt.gca().invert_yaxis()       
-        plt.savefig(output_path+str(cell_type)+'.pdf', bbox_inches='tight')
+        plt.savefig(output_path+tools.filename_strip(str(cell_type))+'.pdf', bbox_inches='tight')
         plt.cla()
         plt.clf()
         plt.close()

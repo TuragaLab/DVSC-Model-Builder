@@ -1,4 +1,4 @@
-import model_builder
+import model_builder_v1
 import sys, os, math
 import pickle
 import matplotlib
@@ -22,7 +22,7 @@ def main():
     datasets.append((['../raw_connectome/FIB-25/annotations-body.json'],  ['../raw_connectome/FIB-25/annotations-synapse.json'], False))
     datasets.append((['../raw_connectome/FIB-19/body.txt'], ['../raw_connectome/FIB-19/synapse.txt'], False))
     # Parse
-    dataset_bodies, dataset_synapses = model_builder.parse_datasets_to_model(datasets)
+    dataset_bodies, dataset_synapses = model_builder_v1.parse_datasets_to_model(datasets)
     
     # [dataset][cell_type][(index, id, (y,x))]
     orig_dataset_known_positions = []
