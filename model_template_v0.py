@@ -27,35 +27,38 @@ output_units = ['Tm1', 'Tm2', 'Tm3', 'Tm4', 'Tm6', 'Tm9', 'Tm20',
 
 # Motion detection (intensity)
 # The PR neurons target 6 different cartridges
-nodes.append(('R1', ('stride', (1, 1)), 'relu', 1.0))
-nodes.append(('R2', ('stride', (1, 1)), 'relu', 1.0))
-nodes.append(('R3', ('stride', (1, 1)), 'relu', 1.0))
-nodes.append(('R4', ('stride', (1, 1)), 'relu', 1.0))
-nodes.append(('R5', ('stride', (1, 1)), 'relu', 1.0))
-nodes.append(('R6', ('stride', (1, 1)), 'relu', 1.0))
+nodes.append(('R1', ('stride', (1, 1)), 'relu', 3.5))
+nodes.append(('R2', ('stride', (1, 1)), 'relu', 3.5))
+nodes.append(('R3', ('stride', (1, 1)), 'relu', 3.5))
+nodes.append(('R4', ('stride', (1, 1)), 'relu', 3.5))
+nodes.append(('R5', ('stride', (1, 1)), 'relu', 3.5))
+nodes.append(('R6', ('stride', (1, 1)), 'relu', 3.5))
 
 # Color vision (30% blue, 70% yellow)
-nodes.append(('R7', ('stride', (1, 1)), 'relu', 1.0))
-nodes.append(('R8', ('stride', (1, 1)), 'relu', 1.0))
+nodes.append(('R7', ('stride', (1, 1)), 'relu', 3.5))
+nodes.append(('R8', ('stride', (1, 1)), 'relu', 3.5))
 
 # Lamina monopolar cells
-nodes.append(('L1', ('stride', (1, 1)), 'relu', 1.0))  # ON-pathway (Armin Bahl)
-nodes.append(('L2', ('stride', (1, 1)), 'relu', 1.0))  # OFF-pathway (Armin Bahl)
-nodes.append(('L3', ('stride', (1, 1)), 'relu', 1.0))
-nodes.append(('L4', ('stride', (1, 1)), 'relu', 1.0))
-nodes.append(('L5', ('stride', (1, 1)), 'relu', 1.0))
-
+nodes.append(('L1', ('stride', (1, 1)), 'relu', 3.5))  # ON-pathway (Armin Bahl)
+nodes.append(('L2', ('stride', (1, 1)), 'relu', 3.5))  # OFF-pathway (Armin Bahl)
+nodes.append(('L3', ('stride', (1, 1)), 'relu', 3.5))
+nodes.append(('L4', ('stride', (1, 1)), 'relu', 3.5))
+nodes.append(('L5', ('stride', (1, 1)), 'relu', 3.5))
+    
 # Lamina wide-field neurons
 # LAWF: Enhance neural coding by subtracting low-frequency signals from the inputs to motion detection circuits (Tuthill 2014)
 # ~ 140 Lawf2 per optic lobe (780 ommatidia = 30(A-P)x26(D-V), 135 Lawf2 = 15(A-P)x9(D-V))
 # ~ 5 Lawf2 connections to each cartridge
 # Innervation in lamina: 28 cartridges, skewed along dorsal-ventral (A-P: 4, D-V: 7)
 # Innervation in medulla: M1 127 cartridges (hexagon sidelength 7), M8-10 19 cartridges (hexagon sidelength 3)
-nodes.append(('Lawf2', ('stride', (3, 2)), 'relu', 1.0))
+nodes.append(('Lawf2', ('stride', (3, 2)), 'relu', 3.5))
+
+# Amacrine cell
+nodes.append(('Am', ('stride', (1, 1)), 'relu', 3.5))
 
 # Centrifugal medulla neurons (feedback)
-nodes.append(('C2', ('stride', (1, 1)), 'relu', 1.0))
-nodes.append(('C3', ('stride', (1, 1)), 'relu', 1.0))
+nodes.append(('C2', ('stride', (1, 1)), 'relu', 3.5))
+nodes.append(('C3', ('stride', (1, 1)), 'relu', 3.5))
 
 ################################################################################
 # Edges
@@ -119,7 +122,7 @@ edges.append(('L4', 'L5', [((0, 0), 2.0), ((1, -1), 3.0), ((0, -1), 2.0)], 1.0, 
 edges.append(('L4', 'Am', [((0, 0), 1.0), ((1, -1), 1.0), ((0, -1), 1.0)], 1.0, 1.0))
 
 # Am --> R1, R2, R4, R5, L1, L2, L3, L4, L5, Am, T1, C2, C3
-edges.append(('Am', 'R1', (0, 0), 1, 1.0)) # simplified, accounted for in input data
+edges.append(('Am', 'R1', [((0, 0), 1.0)], 1.0, 1.0)) # simplified, accounted for in input data
 edges.append(('Am', 'R2', [((0, 0), 1.0)], 1.0, 1.0)) # simplified, accounted for in input data
 edges.append(('Am', 'R4', [((0, 0), 2.0)], 1.0, 1.0)) # simplified, accounted for in input data
 edges.append(('Am', 'R5', [((0, 0), 2.0)], 1.0, 1.0)) # simplified, accounted for in input data
@@ -153,29 +156,29 @@ lawf2_lamina_range = [(-3,-1),(-2,-1),(-1,-1),(0,-1),(1,-1),(2,-1),(3,-1),
 # Lawf most likely inhibitory
 # Lawf --> R1, R2, R3, R4, R6, L1, L2, L3, L5, Am, T1, C2, C3, Lawf
 # Lawf2 range (distributed to ~5 processes of Lawf2 cells)
-edges.append(('Lawf2', 'Lawf2', list(zip([7.0/5.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'R1', list(zip([1.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'R2', list(zip([3.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'R3', list(zip([1.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'R4', list(zip([1.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'R5', list(zip([0.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'R6', list(zip([1.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'L1', list(zip([2.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'L2', list(zip([9.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'L3', list(zip([21.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'L5', list(zip([1.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'Am', list(zip([36.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'T1', list(zip([6.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'C2', list(zip([6.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
-edges.append(('Lawf2', 'C3', list(zip([2.0/11.0 for o in lawf2_lamina_range], lawf2_lamina_range)), -1.0, 1.0))
+edges.append(('Lawf2', 'Lawf2', list(zip(lawf2_lamina_range, [7.0/5.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'R1', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'R2', list(zip(lawf2_lamina_range, [3.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'R3', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'R4', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'R5', list(zip(lawf2_lamina_range, [0.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'R6', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'L1', list(zip(lawf2_lamina_range, [2.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'L2', list(zip(lawf2_lamina_range, [9.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'L3', list(zip(lawf2_lamina_range, [21.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'L5', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'Am', list(zip(lawf2_lamina_range, [36.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'T1', list(zip(lawf2_lamina_range, [6.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'C2', list(zip(lawf2_lamina_range, [6.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'C3', list(zip(lawf2_lamina_range, [2.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
 
 # Hypothesis 1: L1/L2 connect to Lawf2 in the M1 layer
-edges.append(('L1', 'Lawf2', list(zip([5.0 for o in hex_areas[3]], hex_areas[3])), 1.0, 1.0))
-edges.append(('L2', 'Lawf2', list(zip([5.0 for o in hex_areas[3]], hex_areas[3])), 1.0, 1.0))
+edges.append(('L1', 'Lawf2', list(zip(hex_areas[3], [5.0 for o in hex_areas[3]])), 1.0, 1.0))
+edges.append(('L2', 'Lawf2', list(zip(hex_areas[3], [5.0 for o in hex_areas[3]])), 1.0, 1.0))
     
 # Hypothesis 2: C2/C3 connect to Lawf2 in the M8-M10 layers
-edges.append(('C2', 'Lawf2', list(zip([5.0 for o in hex_areas[3]], hex_areas[3])), -1.0, 1.0))
-edges.append(('C3', 'Lawf2', list(zip([5.0 for o in hex_areas[3]], hex_areas[3])), -1.0, 1.0))
+edges.append(('C2', 'Lawf2', list(zip(hex_areas[3], [5.0 for o in hex_areas[3]])), -1.0, 1.0))
+edges.append(('C3', 'Lawf2', list(zip(hex_areas[3], [5.0 for o in hex_areas[3]])), -1.0, 1.0))
 
 
 

@@ -1,4 +1,4 @@
-import model_builder_v1
+import model_builder
 import sys, os, math
 import pickle
 import matplotlib
@@ -20,9 +20,9 @@ def main():
     datasets = []
     # List of body files, list of synapse files, right eye (False) or left eye (True)
     datasets.append((['../raw_connectome/FIB-25/annotations-body.json'],  ['../raw_connectome/FIB-25/annotations-synapse.json'], False))
-    datasets.append((['../raw_connectome/FIB-19/body.txt'], ['../raw_connectome/FIB-19/synapse.txt'], False))
+    datasets.append((['../raw_connectome/FIB-19/body.txt'], ['../raw_connectome/FIB-19/export-fib19.json'], False))
     # Parse
-    dataset_bodies, dataset_synapses = model_builder_v1.parse_datasets_to_model(datasets)
+    dataset_bodies, dataset_synapses = model_builder.parse_datasets_to_model(datasets)
     
     # [dataset][cell_type][(index, id, (y,x))]
     orig_dataset_known_positions = []
@@ -85,9 +85,11 @@ def main():
                     count_correct[0][2+i] += 1
                     for j in range(1,11):
                         for compare_known_position in results[j][i][cell_type]:
-                            if (compare_known_position == reference_known_position):
+                            if (compare_known_position[1] == reference_known_position[1] and
+                                compare_known_position[3] == reference_known_position[3]):
                                 count_correct[j][1] += 1
                                 count_correct[j][2+i] += 1
+                                print('Here 1' + str(compare_known_position) + str(reference_known_position))
                                 
     for cell_type in cell_types:
         for i in range(0, len(orig_dataset_known_positions)):
@@ -96,24 +98,24 @@ def main():
                 for reference_known_position in reference_known_positions:
                     for j in range(0,11):
                         for compare_known_position in results[j][i][cell_type]:
-                            if (compare_known_position == reference_known_position):
+                            if (compare_known_position[1] == reference_known_position[1] and
+                                compare_known_position[3] == reference_known_position[2]):
                                 count_correct[j][len(orig_dataset_known_positions)+2] += 1
                                 count_correct[j][len(orig_dataset_known_positions)+3+i] += 1
 
         
     xlabels = [i*10 for i in range(0,11)]
     for j in reversed(range(0,11)):
-        count_correct[j][0] = (known_position_count-(known_position_count/10)*j)/total_position_count * 100.0
-        for i in range(1, 1+2*(len(results[0])+1)):
-            count_correct[j][i] = count_correct[j][i]/count_correct[0][i] * (known_position_count/total_position_count if i > 3 else 1.0) * 100.0
-    
-    plt.figure(figsize=(6.2,6.2))
+        count_correct[j][0] = (known_position_count-(known_position_count/10)*j)#/total_position_count * 100.0
+
+    print(count_correct)
+    plt.figure(figsize=(6.2, 6.2))
     plt.plot(xlabels, count_correct)
     plt.legend(['Reference positions', 'Combined', 'FIB-25', 'FIB-19', 'Combined (annotated)', 'FIB-25 (annotated)', 'FIB-19 (annotated)'])
     plt.xlabel('Known positions removed [\%]')
-    plt.ylabel('Matching positions [\%]')
+    plt.ylabel('Matching positions')
     plt.xlim([0,100])
-    plt.ylim([0,100])
+    plt.ylim([0,2000])
     plt.savefig(output_name+'/optimization_benchmark.pdf', tight_layout=True)
     plt.show()
     

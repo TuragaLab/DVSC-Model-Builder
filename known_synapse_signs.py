@@ -9,7 +9,6 @@ known_signs[('Mi4', None)] = -1.0
 # Mi9 is inhibitory (Michael Reiser, 27.01.2017)
 known_signs[('Mi9', None)] = -1.0
 
-
 # All photoreceptors use histamine as a neurotransmitter --> inhibitory (Hardie, 1989).
 known_signs[('R1', None)] = -1.0
 known_signs[('R2', None)] = -1.0
@@ -19,6 +18,11 @@ known_signs[('R5', None)] = -1.0
 known_signs[('R6', None)] = -1.0
 known_signs[('R7', None)] = -1.0
 known_signs[('R8', None)] = -1.0
+
+# Unpublished data; Nern, Aljoscha, 01.05.2018
+known_signs[('Pm3', None)] = -1.0
+known_signs[('Pm4', None)] = -1.0
+known_signs[('Dm10', None)] = -1.0
 
 
 def get_sign(src, tar):

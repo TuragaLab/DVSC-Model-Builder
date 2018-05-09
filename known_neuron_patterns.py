@@ -63,3 +63,6 @@ known_neuron_patterns['Dm19'] = ('stochastic', 15.0/750.0)
 
 # Dm20: ~50 cells per OL
 known_neuron_patterns['Dm20'] = ('stochastic', 50.0/750.0)
+
+# Taken as tiled (2x1) since found 4x in 7 columns (Takemura 2013 S1)
+known_neuron_patterns['Tm6'] = ('stochastic', 0.5)

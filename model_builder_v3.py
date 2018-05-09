@@ -34,33 +34,11 @@ from joblib import Parallel, delayed
 import time
 from matplotlib.collections import PatchCollection
 import matplotlib.patches as mpatches
-from scipy.spatial.distance import cdist
-from mpl_toolkits.mplot3d import Axes3D
-from sklearn.decomposition import PCA
-from matplotlib.patches import FancyArrowPatch
-from mpl_toolkits.mplot3d import proj3d
-import affine_transform
-
-
-class Arrow3D(FancyArrowPatch):
-    def __init__(self, xs, ys, zs, *args, **kwargs):
-        FancyArrowPatch.__init__(self, (0,0), (0,0), *args, **kwargs)
-        self._verts3d = xs, ys, zs
-
-    def draw(self, renderer):
-        xs3d, ys3d, zs3d = self._verts3d
-        xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, renderer.M)
-        self.set_positions((xs[0],ys[0]),(xs[1],ys[1]))
-        FancyArrowPatch.draw(self, renderer)
-
 
 # DVSC imports
 import hexgrid_reference
 import known_cell_types
-
-from sklearn.datasets import make_blobs
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_samples, silhouette_score
+import compat_temporal_offsets
 
 def parse_body_dataset_json(path, bodies, yrotate):
     json_connectome_bodies = None
@@ -308,73 +286,55 @@ def norm_lpdf(dist, x, log_likelihood, min_prob=0.05):
     else:
         return log_likelihood + math.log(val)
 
-def update_normal_maps(cell_pairs, hex_to_hex_offsets, dataset_known_positions,
-                       dataset_assigned_positions, dataset_sorted_synapses):
+def update_normal_maps(cell_pairs, hex_to_hex_offsets, dataset_known_positions, dataset_sorted_synapses):
     normal_map = dict()
     for i in range(0, len(dataset_known_positions)):
         for cell_pair in cell_pairs:
             normal_map[(i, cell_pair)] = dict()
-            data = dict()
             for offset in hex_to_hex_offsets:
-                data[offset] = []
-            # Collect data
-            sorted_synapses = dataset_sorted_synapses[i]
-            if cell_pair[0] in dataset_known_positions[i].keys():
-                for src_body in (dataset_known_positions[i][cell_pair[0]]+dataset_assigned_positions[i][cell_pair[0]]):
-                    if cell_pair[1] in dataset_known_positions[i].keys():
-                        for tar_body in (dataset_known_positions[i][cell_pair[1]]+dataset_assigned_positions[i][cell_pair[1]]):
-                            offset = (tar_body[3][0] - src_body[3][0], tar_body[3][1] - src_body[3][1])
-                            if offset in hex_to_hex_offsets:
-                                if ((src_body[1], tar_body[1]) in sorted_synapses.keys()):
-                                    data[offset].append(sorted_synapses[(src_body[1], tar_body[1])])
+                data = []
+                # Collect data
+                sorted_synapses = dataset_sorted_synapses[i]
+                if cell_pair[0] in dataset_known_positions[i].keys():
+                    for src_body in dataset_known_positions[i][cell_pair[0]]:
+                        if cell_pair[1] in dataset_known_positions[i].keys():
+                            for tar_body in dataset_known_positions[i][cell_pair[1]]:
+                                if (tar_body[3][0] - src_body[3][0], tar_body[3][1] - src_body[3][1]) == offset:
+                                    if ((src_body[1], tar_body[1]) in sorted_synapses.keys()):
+                                        data.append(sorted_synapses[(src_body[1], tar_body[1])])
+                                    else:
+                                        data.append(0.0)
 
-            # At least 3 data sample needed to compute mu, std values
-            for offset in hex_to_hex_offsets:
-                if len(data[offset]) > 2:
-                    mu, std = scipy.stats.norm.fit(np.asarray(data[offset]))
+                # At least 1 data sample needed to compute mu, std values
+                if len(data) > 1:
+                    mu, std = scipy.stats.norm.fit(np.asarray(data))
                     normal_map[(i, cell_pair)][offset] = (mu, std)
                 else:
                     normal_map[(i, cell_pair)][offset] = None
     return normal_map
     
-def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknown_positions, known_positions, assigned_positions,\
+def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknown_positions, known_positions,\
                             sorted_synapses, body_synapse_keys, body_remap, available_offsets):
     
-    max_num_clusters = 5
+    num_known_scom = 0
+    for key in known_positions.keys():
+        for k in range(0, len(known_positions[key])):
+            k_body = known_positions[key][k]
+            if not k_body[2] == None:
+                num_known_scom += 1
+    k_scoms = np.zeros((num_known_scom, 3))
+    k_offsets = np.zeros((num_known_scom, 2))
+    l = 0
+    for key in known_positions.keys():
+        for k in range(0, len(known_positions[key])):
+            k_body = known_positions[key][k]
+            if not k_body[2] == None:
+                k_scoms[l, :] = k_body[2]
+                k_offsets[l, :] = k_body[3]
+                l += 1
     
     assignment_picks = []
     for uk_type in uk_types:
-        
-        transforms = [None for k in range(0, max_num_clusters)]
-        transform_weights = [0.0 for k in range(0, max_num_clusters)]
-        transform_total = 0
-        for label in range(0, max_num_clusters):
-            k_scoms = []
-            k_offsets = []
-            for k in range(0, len(known_positions[uk_type])):
-                k_body = known_positions[uk_type][k]
-                if not k_body[2] is None:
-                    for scom in k_body[2]:
-                        if scom[0] == label:
-                            k_scoms.append(np.asarray(scom)[1:4])
-                            k_offsets.append(np.asarray(list(hexgrid_reference.hex_to_cartesian(k_body[3]))+[0.0]))
-            for k in range(0, len(assigned_positions[uk_type])):
-                k_body = assigned_positions[uk_type][k]
-                if not k_body[2] is None:
-                    for scom in k_body[2]:
-                        if scom[0] == label:
-                            k_scoms.append(np.asarray(scom)[1:4])
-                            k_offsets.append(np.asarray(list(hexgrid_reference.hex_to_cartesian(k_body[3]))+[0.0]))
-            if len(k_scoms) > 2:             
-                transforms[label] = affine_transform.Affine_Fit(k_scoms, k_offsets)
-                transform_weights[label] = len(k_scoms)
-                transform_total += len(k_scoms)
-            
-        for label in range(0, max_num_clusters):
-            if transform_weights[label] > 0: 
-                transform_weights[label] /= float(transform_total)
-        
-        
         type_available_offsets = available_offsets[uk_type]
         cost_matrix = np.zeros((len(unknown_positions[uk_type]),len(type_available_offsets)))
         if not uk_type in unknown_positions.keys():
@@ -385,7 +345,7 @@ def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknow
             normalizer = 0.0
             max_log_likelihood = None
             # Calculate probabilties for all free offsets
-            log_likelihood_per_offset = [math.log(1.0) for offset in type_available_offsets]
+            log_likelihood_per_offset = [None for offset in type_available_offsets]
             for syn_key, cell_pair in body_synapse_keys[uk_body[1]]:
                 # print(cell_pair)
                 # Interaction: The source cell is of the same type as the unknown cell
@@ -421,29 +381,31 @@ def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknow
                         for offset_index in range(0, len(type_available_offsets)):
                             log_likelihood_per_offset[offset_index] = norm_lpdf(None, count, log_likelihood_per_offset[offset_index])
         
-            for label in range(0, max_num_clusters):
-                if not (transforms[label] == None) and not (transforms[label] == False):
-                    uk_scoms = []
-                    if not uk_body[2] is None:
-                        for scom in uk_body[2]:
-                            if scom[0] == label:
-                                uk_scoms.append(np.asarray(scom)[1:4])
-                    if len(uk_scoms) > 0:
-                        transformed_offsets = np.transpose(transforms[label].Transform(np.transpose(uk_scoms)))
-                        transformed_offsets = np.mean(np.asarray(transformed_offsets), axis=0)[0:2]
-                        # print(uk_body[0], hexgrid_reference.cartesian_to_hex(transformed_offsets))
-                        offset_distances = [0.0 for k in range(0, len(type_available_offsets))]
-                        min_offset_distance = None
-                        for offset_index in range(0, len(type_available_offsets)):
-                            offset_distances[offset_index] = np.linalg.norm(np.asarray(hexgrid_reference.hex_to_cartesian(type_available_offsets[offset_index])) - np.asarray(transformed_offsets))
-                            min_offset_distance = offset_distances[offset_index] if min_offset_distance is None else np.nanmin(np.asarray([offset_distances[offset_index], min_offset_distance]))
-                        
-                        for offset_index in range(0, len(type_available_offsets)):
-                            if not np.isnan(min_offset_distance) and not np.isinf(min_offset_distance) and min_offset_distance > 0.0:
-                                log_likelihood_per_offset[offset_index] += math.log(1.0/(offset_distances[offset_index]/min_offset_distance))
+            max_residual = 0.0
+            residuals = np.zeros(len(type_available_offsets))
+            if not uk_body[2] == None:
+                delta_offsets = np.zeros((len(type_available_offsets), num_known_scom))               
+                delta_scoms = np.linalg.norm(k_scoms - np.asarray(uk_body[2]), axis=1)
+                for offset_index in range(0, len(type_available_offsets)):
+                    offset = type_available_offsets[offset_index]
+                    delta_offsets[offset_index,:] = np.linalg.norm(np.dot(hexgrid_reference.hex_to_cartesian_R, np.transpose(k_offsets - np.asarray(offset))), axis=0)
+                    
+                for offset_index in range(0, len(type_available_offsets)):
+                    scale = np.mean(delta_offsets[offset_index]/delta_scoms)
+                    residuals[offset_index] = np.sum(np.abs(scale * delta_scoms - delta_offsets[offset_index]))
+                    if residuals[offset_index] > max_residual:
+                        max_residual = residuals[offset_index]
+            
+            # print(np.min(residuals))
+            # print(np.max(residuals))
             
             for offset_index in range(0, len(type_available_offsets)):
                 log_likelihood = log_likelihood_per_offset[offset_index]
+                if max_residual > 0.0:
+                    # 5% cutoff to circumvent math domain errors of log
+                    log_likelihood += math.log(max(1.00 - residuals[offset_index]/max_residual, 0.05))
+
+                log_likelihood_per_offset[offset_index] = log_likelihood
                 if max_log_likelihood == None or max_log_likelihood < log_likelihood:
                     max_log_likelihood = log_likelihood
             
@@ -464,9 +426,9 @@ def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknow
                 else:
                     cost_matrix[j, offset_index] = 1.0
                     
-        # print(np.min(cost_matrix), np.max(cost_matrix))
+        # print(cost_matrix)
         etime = time.time()
-        # print('Time per cell type: ' + str(etime-stime))
+        #print('Time per cell type: ' + str(etime-stime))
                     
         if (len(unknown_positions[uk_type])) > 0:
             row_ind, col_ind = scipy.optimize.linear_sum_assignment(cost_matrix)
@@ -474,91 +436,27 @@ def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknow
             assignment_matrix[row_ind, col_ind] = 1.0
             
             cost_assignment_matrix = np.multiply(assignment_matrix, cost_matrix)
+            
             cost_per_body = np.sum(cost_assignment_matrix, axis=1)
+            pick_j_val = None
+            pick_j = None
+            offset_index = None
+            for j in range(0, len(unknown_positions[uk_type])):
+                if pick_j_val == None or pick_j_val > cost_per_body[j]:
+                    pick_j_val = cost_per_body[j]
+                    pick_j = j
+                    offset_index = col_ind[j]
+
+            total_cost = np.sum(cost_per_body)/len(unknown_positions[uk_type])
                         
             for j in range(0, len(unknown_positions[uk_type])):
-                assignment_pick = (1.0-cost_per_body[j], i, uk_type, unknown_positions[uk_type][j][0], unknown_positions[uk_type][j][1], unknown_positions[uk_type][j][2], type_available_offsets[col_ind[j]])
+                assignment_pick = ((1.0/total_cost) if j == pick_j else 0.0, i, uk_type, unknown_positions[uk_type][j][0], unknown_positions[uk_type][j][1], unknown_positions[uk_type][j][2], type_available_offsets[offset_index])
                 assignment_picks.append(assignment_pick)
             
     return assignment_picks
 
-def synapse_clusters(locations, min_clusters=1, max_clusters=5, debug=False, epsilon=0.65, compute_cluster_pca=False):
-    final_centers = None
-    final_labels = None
-    final_pcas = None
-    
-    locs = np.asarray(locations)
-    # Single synapse -> synapse location is only cluster location
-    if len(locs) == 0:
-        return (None, None, None)
-    if len(locs) == 1:
-        return (locs.tolist(), [0 for i in range(0, len(locs.tolist()))], None)
-    distortions = []
-    silhouettes = []
-    centers = []
-    labels = []
-    # Between 1 and either 5 or len(locs)-1 clusters
-    for n_clusters in range(min_clusters, min(max_clusters+1, len(locs))):
-        clusterer = KMeans(n_clusters=n_clusters, random_state=10)
-        labels.append(clusterer.fit_predict(locs))
-        #clusterer.fit(locs)
-        if n_clusters > 1:
-            silhouettes.append(silhouette_score(locs, labels[len(labels)-1]))
-        else:
-            silhouettes.append(0.0)
-        #print(silhouette_avg)
-        distortions.append(sum(np.min(cdist(locs, clusterer.cluster_centers_, 'euclidean'), axis=1)) / locs.shape[0])
-        centers.append(clusterer.cluster_centers_)
-                
-    if debug:
-        plt.plot(range(min_clusters, max_clusters+1), distortions, 'bx-')
-        plt.show()
-        plt.pause(1)
-        plt.plot(range(min_clusters, max_clusters+1), silhouettes, 'bx-')
-        plt.show()
-        plt.pause(1)
-        
-    if np.max(silhouettes) >= epsilon:
-        # Suitable cluster count found via silhouettes -> return best scoring #clusters
-        final_centers = centers[np.argmax(silhouettes)].tolist()
-        final_labels = labels[np.argmax(silhouettes)]
-    else:
-        # No suitable count found; return smallest #clusters
-        final_centers = centers[0].tolist()
-        final_labels = labels[0]
-        
-    if compute_cluster_pca:
-        final_pcas = []
-        cluster_data = [[] for i in range(0, len(final_centers))]
-        for location, label in zip(locations, final_labels):
-            cluster_data[label].append(location)
-        for cluster in cluster_data:
-            pca = PCA(n_components=3)
-            pca.fit(cluster)
-            final_pcas.append(pca)
-        
-    if debug:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(locs[:,0].tolist(), locs[:,1].tolist(), locs[:,2].tolist(), c=final_labels)
-        if compute_cluster_pca:
-            for pca in final_pcas:
-                for length, vector in zip(pca.explained_variance_, pca.components_):
-                    v = vector * 3 * np.sqrt(length)
-                    v0 = pca.mean_
-                    v1 = pca.mean_ + v
-                    a = Arrow3D([v0[0], v1[0]], [v0[1], v1[1]], 
-                                [v0[2], v1[2]], mutation_scale=20, 
-                                lw=3, arrowstyle="-|>", color="r")
-                    ax.add_artist(a)
-        plt.show()
-        plt.pause(1)    
-    return (final_centers, final_labels, final_pcas)
-
 def optimize_neuron_positions(dataset_bodies, dataset_synapses, output_name, n_threads=16):
-    np.seterr(all='ignore')
-    
-    hex_offsets = hexgrid_reference.hex_area(8)
+    hex_offsets = hexgrid_reference.hex_area(6)
     hex_to_hex_offsets = set()
     for hex_offset_1 in hex_offsets:
         for hex_offset_2 in hex_offsets:
@@ -568,62 +466,45 @@ def optimize_neuron_positions(dataset_bodies, dataset_synapses, output_name, n_t
     dataset_known_positions = []
     # [dataset][cell_type][(index, id, (u,v,w))]
     dataset_unknown_positions = []
-    dataset_assigned_positions = []
-    dataset_last_assigned_positions = []
     # [dataset][cell_type][offsets]
     dataset_available_offsets = []
     # [dataset][body_id][synapse_keys]
     dataset_body_synapse_keys = []
     for i in range(0, len(dataset_bodies)):
+        index = 0
         sub_known_positions = dict()
         sub_unknown_positions = dict()
-        sub_empty_positions = dict()
         bodies = dataset_bodies[i]
         dataset_available_offsets.append(dict())
         dataset_body_synapse_keys.append(dict())
-        
-        total_coords = []
-        body_scoms = []
-        
-        for body_key in sorted(list(bodies.keys())):
+        for body_key in list(bodies.keys()):
             body = bodies[body_key]
-            coords = []
+            
             # Compute synapse (pre and post) center of mass (position) for the body
-            scoms = None
+            scom = None
+            synapse_count = 0
+            coord_u = 0.0
+            coord_v = 0.0
+            coord_w = 0.0
             synapses = dataset_synapses[i]
             for synapse_key in list(synapses.keys()):
                 for j in range(0, len(synapses[synapse_key])):
                     if synapses[synapse_key][j][0] == body_key or synapses[synapse_key][j][1] == body_key:
                         for location in synapses[synapse_key][j][3]:
-                            coords.append(location)
+                            coord_u += location[0]
+                            coord_v += location[1]
+                            coord_w += location[2]
+                            synapse_count += 1
                         if not body_key in dataset_body_synapse_keys[i]:
                             dataset_body_synapse_keys[i][body_key] = [((synapses[synapse_key][j][0], synapses[synapse_key][j][1]), synapse_key)]
                         else:
                             dataset_body_synapse_keys[i][body_key].append(((synapses[synapse_key][j][0], synapses[synapse_key][j][1]), synapse_key))
                         
-            scoms, labels, _ = synapse_clusters(coords, debug=False, compute_cluster_pca=False)
-            body_scoms.append(scoms)
-            if not scoms is None:
-                total_coords += scoms
-                
-        _, total_labels, _ = synapse_clusters(total_coords, debug=False, compute_cluster_pca=False, epsilon=0.40)
-        
-        labeled_body_scoms = []
-        k = 0
-        for scoms in body_scoms:
-            if scoms is None:
-                labeled_body_scoms.append(None)
-            else:
-                labeled_scoms = []
-                for scom in scoms:
-                    labeled_scom = [total_labels[k], scom[0], scom[1], scom[2]]
-                    k += 1
-                    labeled_scoms.append(labeled_scom)
-                labeled_body_scoms.append(labeled_scoms)
-        
-        index = 0
-        for body_key in sorted(list(bodies.keys())):
-            body = bodies[body_key]
+            if synapse_count > 0:
+                coord_u = coord_u / synapse_count
+                coord_v = coord_v / synapse_count
+                coord_w = coord_w / synapse_count
+                scom = (coord_u, coord_v, coord_w)
             
             body_cell_types = [body[0]]
             if body_cell_types[0] in known_cell_types.cell_remap.keys():
@@ -638,16 +519,14 @@ def optimize_neuron_positions(dataset_bodies, dataset_synapses, output_name, n_t
                     sub_known_positions[body_cell_type] = []
                 if not body_cell_type in sub_unknown_positions:
                     sub_unknown_positions[body_cell_type] = []
-                if not body_cell_type in sub_empty_positions:
-                    sub_empty_positions[body_cell_type] = []
                     
                 # Only use bodies connected to synapses with at least one position
-                if not labeled_body_scoms[index] is None:
+                if not scom is None:
                     if body[1] == None or len(body_cell_types) > 1:
                         # Either unknown position or known position but more than one possible cell type
-                        sub_unknown_positions[body_cell_type].append((index, body_key, labeled_body_scoms[index]))
+                        sub_unknown_positions[body_cell_type].append((index, body_key, scom))
                     else:
-                        sub_known_positions[body_cell_type].append((index, body_key, labeled_body_scoms[index], body[1]))
+                        sub_known_positions[body_cell_type].append((index, body_key, scom, body[1]))
                         # Offset no longer available
                         try:
                             dataset_available_offsets[i][body_cell_type].remove(body[1])
@@ -655,9 +534,7 @@ def optimize_neuron_positions(dataset_bodies, dataset_synapses, output_name, n_t
                             print("Double allocation of offset: ", body[1], body_cell_type)
             index = index + 1   
         dataset_known_positions.append(sub_known_positions) 
-        dataset_unknown_positions.append(sub_unknown_positions)
-        dataset_assigned_positions.append(sub_empty_positions)
-        dataset_last_assigned_positions.append(sub_empty_positions)
+        dataset_unknown_positions.append(sub_unknown_positions) 
     
     dataset_sorted_synapses = []
     for i in range(0, len(dataset_synapses)):
@@ -687,14 +564,14 @@ def optimize_neuron_positions(dataset_bodies, dataset_synapses, output_name, n_t
             dataset_normal_maps[i][cell_pair] = dict()
     
     assignment_picks = []
+    num_assignments_left = 1
 
-    with Parallel(n_jobs=n_threads) as parallel:
-        for iter in range(0, 250):
+    while (num_assignments_left > 0):
+        with Parallel(n_jobs=n_threads) as parallel:
             # Compute fit based on cells with known positions
             t0 = time.time()
             norm_maps_updates = parallel(delayed(update_normal_maps)(sub_cell_pairs, hex_to_hex_offsets,\
-                                                                     dataset_known_positions, dataset_assigned_positions,
-                                                                     dataset_sorted_synapses)\
+                                                                     dataset_known_positions, dataset_sorted_synapses)\
                                           for sub_cell_pairs in tools.split(cell_pairs, n_threads))
             for norm_maps_update in norm_maps_updates:
                 for set_id, update_key in norm_maps_update.keys():
@@ -729,8 +606,7 @@ def optimize_neuron_positions(dataset_bodies, dataset_synapses, output_name, n_t
                     
                 assignment_picks_updates = parallel(delayed(update_assignment_picks)(i, uk_per_thread_types, hex_to_hex_offsets,\
                                                                                      dataset_normal_maps[i], dataset_unknown_positions[i],\
-                                                                                     dataset_known_positions[i], dataset_assigned_positions[i],
-                                                                                     dataset_sorted_synapses[i],
+                                                                                     dataset_known_positions[i], dataset_sorted_synapses[i],
                                                                                      dataset_body_synapse_keys[i], \
                                                                                      dataset_body_remap[i], dataset_available_offsets[i])\
                                                     for uk_per_thread_types in tools.split(uk_types, n_threads))
@@ -749,51 +625,31 @@ def optimize_neuron_positions(dataset_bodies, dataset_synapses, output_name, n_t
            
             assignment_picks.sort(reverse=True, key=lambda tup: tup[0])
             
-            dataset_last_assigned_positions = copy.deepcopy(dataset_assigned_positions)
-            for i in range(0, len(dataset_known_positions)):
-                for key in dataset_assigned_positions[i].keys():
-                    dataset_assigned_positions[i][key].clear()
-            
-            backup_dataset_unknown_positions = copy.deepcopy(dataset_unknown_positions)
             # Can update from multiple datasets simultaneously
-            for i in range(0, len(assignment_picks)):
-                assignment_pick = assignment_picks[i]
-                # Accept no assignment with less than x probability to not assign all positions at once
-                if assignment_pick[0] < ((0.1/(5.0*iter) if iter > 0 else 0.1) if iter < 100 else 0.0):
-                    break
-                # Body now has a known position
-                # dataset_available_offsets[assignment_pick[1]][assignment_pick[2]].remove(assignment_pick[6])
-                dataset_unknown_positions[assignment_pick[1]][assignment_pick[2]].remove((assignment_pick[3], assignment_pick[4], assignment_pick[5]))
+            for i in range(0, len(dataset_bodies)):
+                assignment_pick = None
+                for tmp_assignment_pick in assignment_picks:
+                    # print(tmp_assignment_pick[1])
+                    if i == tmp_assignment_pick[1]:
+                        assignment_pick = tmp_assignment_pick
+                        # print(assignment_pick)
+                        break
+                if not (assignment_pick is None):
+                    # Body now has a known position
+                    dataset_available_offsets[assignment_pick[1]][assignment_pick[2]].remove(assignment_pick[6])
+                    dataset_unknown_positions[assignment_pick[1]][assignment_pick[2]].remove((assignment_pick[3], assignment_pick[4], assignment_pick[5]))
                     
-                # Remove other unknown positions carrying the same index and cell ID:
-                for cell_type in list(dataset_unknown_positions[assignment_pick[1]].keys()):
-                    try:
-                        dataset_unknown_positions[assignment_pick[1]][cell_type].remove((assignment_pick[3], assignment_pick[4], assignment_pick[5]))
-                    except:
-                        pass
-                dataset_assigned_positions[assignment_pick[1]][assignment_pick[2]].append((assignment_pick[3], assignment_pick[4], assignment_pick[5], assignment_pick[6]))
-                #print('Pick:', len(assignment_picks), assignment_pick)
-            dataset_unknown_positions = backup_dataset_unknown_positions
-                
-            count_equal = 0
-            count_total = 0
-            for i in range(0, len(dataset_known_positions)):
-                for key in dataset_assigned_positions[i].keys():
-                    for assignment in dataset_assigned_positions[i][key]:
-                        for last_assignment in dataset_last_assigned_positions[i][key]:
-                            if assignment == last_assignment:
-                                count_equal += 1
-                        count_total +=1
-                        
-            print('Equal: '+str(count_equal)+'/'+str(count_total))
-            if (count_total - count_equal == 0):
-                print('Converged.')
-                break
-                
-    for i in range(0, len(dataset_known_positions)):
-        for key in dataset_assigned_positions[i].keys():
-            for assignment in dataset_assigned_positions[i][key]:
-                dataset_known_positions[i][key].append(assignment)
+                    # Remove other unknown positions carrying the same index and cell ID:
+                    for cell_type in list(dataset_unknown_positions[assignment_pick[1]].keys()):
+                        try:
+                            dataset_unknown_positions[assignment_pick[1]][cell_type].remove((assignment_pick[3], assignment_pick[4], assignment_pick[5]))
+                        except:
+                            pass
+                    dataset_known_positions[assignment_pick[1]][assignment_pick[2]].append((assignment_pick[3], assignment_pick[4], assignment_pick[5], assignment_pick[6]))
+                    assignment_picks.remove(assignment_pick)
+                    print('Pick:', len(assignment_picks), assignment_pick)
+            
+            num_assignments_left = len(assignment_picks)
     pickle.dump((dataset_known_positions,  dataset_normal_maps), open(output_name, 'wb'), pickle.HIGHEST_PROTOCOL)
    
     
