@@ -15,9 +15,15 @@ input_units = ['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8']
 
 ################################################################################
 # Output units
-
-output_units = ['Tm1', 'Tm2', 'Tm3', 'Tm4', 'Tm6', 'Tm9', 'Tm20',
-                'TmY5a', 'T2', 'T2a', 'T3',
+# All cells that go into lobula layers plus T4a,b,c,d
+output_units = ['Tm1', 'Tm2',
+                'Tm3', 'Tm3-ant', 'Tm3-post',
+                'Tm4', 'Tm4-ant', 'Tm4-post',
+                'Tm5a', 'Tm5b', 'Tm5c', 'Tm5d',
+                'Tm6', 'Tm9', 'Tm16', 'Tm20', 'Tm28',
+                'TmY3', 'TmY4', 'Tm5Y', 'TmY5a', 'TmY9',
+                'TmY10','TmY13', 'TmY14', 'TmY15', 'TmY17',
+                'T1', 'T2', 'T2a', 'T3',
                 'T4a', 'T4b', 'T4c', 'T4d',
                 'T5a', 'T5b', 'T5c', 'T5d']
 

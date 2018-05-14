@@ -109,14 +109,19 @@ def main():
         count_correct[j][0] = (known_position_count-(known_position_count/10)*j)#/total_position_count * 100.0
 
     print(count_correct)
-    plt.figure(figsize=(6.2, 6.2))
+    plt.figure(figsize=(8, 4.5))
     plt.plot(xlabels, count_correct)
+    ax = plt.axes()
     plt.legend(['Reference positions', 'Combined', 'FIB-25', 'FIB-19', 'Combined (annotated)', 'FIB-25 (annotated)', 'FIB-19 (annotated)'])
     plt.xlabel('Known positions removed [\%]')
     plt.ylabel('Matching positions')
     plt.xlim([0,100])
     plt.ylim([0,2000])
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
     plt.savefig(output_name+'/optimization_benchmark.pdf', tight_layout=True)
+    with open(output_name+'/optimization_benchmark.txt', 'w') as txt_file:
+        txt_file.write(str(count_correct)+'\n')
     plt.show()
     
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ def list_strip_none(list_in):
     return list_out
 
 def plot_synapse_positions_parallel(cell_types, i, known_positions, output_path, dataset_bodies,
-                                    dataset_synapses, dataset_names):
+                                    dataset_synapses, dataset_names, short_legend):
     mpldir = tempfile.mkdtemp()
     atexit.register(shutil.rmtree, mpldir)
     umask = os.umask(0)
@@ -134,7 +134,7 @@ def plot_synapse_positions_parallel(cell_types, i, known_positions, output_path,
                     per_cell_points_concat += per_cell_points[k][j].tolist()
             if (len(per_cell_points_concat) > 0):
                 per_cell_points_concat = np.array(per_cell_points_concat)
-                ax.scatter(per_cell_points_concat[:,1], per_cell_points_concat[:,0], c=colors[j], s=2, zorder=1)
+                ax.scatter(per_cell_points_concat[:,1], per_cell_points_concat[:,0], c=colors[j], s=1, zorder=1)
         
         for j in range(0, len(body_ids)):
             count = 0
@@ -149,15 +149,18 @@ def plot_synapse_positions_parallel(cell_types, i, known_positions, output_path,
             ax.scatter(per_cell_coms_avg[1]/count, per_cell_coms_avg[0]/count, c=colors[j], s=40, zorder=2)
 
         legend_labels = []
-        for l in (0,1,2):
+        for l in ([0] if short_legend else [0,1,2]):
             for j in range(0, len(body_ids)):
                 suffix = ''
                 if l == 0:
-                    suffix = ' (annotated)' if bodies_annotated[j] else ' (algorithm)'
+                    if short_legend:
+                        suffix = ' an' if bodies_annotated[j] else ' al'
+                    else:
+                        suffix = ' (annotated)' if bodies_annotated[j] else ' (algorithm)'
                 if l == 2:
                     suffix = ' (center)' 
                 legend_labels.append(str(body_ids[j]) + suffix)
-        plt.legend(legend_labels, loc='center left', bbox_to_anchor=(1.04, 0.5), ncol=int(math.ceil((len(body_ids)*3)/22.0)))
+        plt.legend(legend_labels, loc='center left', bbox_to_anchor=(1.04, 0.5), ncol=int(math.ceil((len(body_ids)*(1 if short_legend else 3))/22.0)))
         
         ax.set_ylabel(r'$v\; [\mu m]$')
         ax.set_xlabel(r'$u\; [\mu m]$')
@@ -177,7 +180,7 @@ def plot_synapse_positions_parallel(cell_types, i, known_positions, output_path,
         plt.close()
 
 
-def plot_synapse_positions(input_name, output_path, dataset_bodies, dataset_synapses, dataset_names, n_threads=16):
+def plot_synapse_positions(input_name, output_path, dataset_bodies, dataset_synapses, dataset_names, n_threads=16, short_legend=False):
     os.makedirs(output_path, exist_ok=True)
     dataset_known_positions, _ = pickle.load(open(input_name, 'rb'))
     
@@ -190,7 +193,7 @@ def plot_synapse_positions(input_name, output_path, dataset_bodies, dataset_syna
         
             parallel(delayed(plot_synapse_positions_parallel)(sub_cell_types, i, known_positions,
                                                               output_path, dataset_bodies,
-                                                              dataset_synapses, dataset_names) \
+                                                              dataset_synapses, dataset_names, short_legend) \
                      for sub_cell_types in tools.split(list(cell_types), n_threads))
             
         

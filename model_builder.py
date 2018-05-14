@@ -285,6 +285,88 @@ def parse_datasets_to_model(datasets):
     unknown_offsets_file.close()
     return dataset_bodies, dataset_synapses
 
+# Takes a list of optimized cell positions and computes the intersection set of those positions
+# Helps to eliminate spurious positions that were estimated wrongly.
+def intersect_neuron_positions(dataset_bodies, dataset_synapses, input_names,
+                               output_name, n_threads=16):
+    
+    hex_offsets = hexgrid_reference.hex_area(8)
+    hex_to_hex_offsets = set()
+    for hex_offset_1 in hex_offsets:
+        for hex_offset_2 in hex_offsets:
+            hex_to_hex_offsets.add((hex_offset_2[1]-hex_offset_1[1],hex_offset_2[0]-hex_offset_1[0]))
+            
+    dataset_sorted_synapses = []
+    for i in range(0, len(dataset_synapses)):
+        sorted_synapses = dict()
+        synapses = dataset_synapses[i]
+        for synapse_key in list(synapses.keys()):
+            for synapse_pair in synapses[synapse_key]:
+                sorted_synapses[(synapse_pair[0], synapse_pair[1])] = float(synapse_pair[2])
+        dataset_sorted_synapses.append(sorted_synapses)
+        
+    dataset_cell_pairs = []
+    cell_pairs = []
+    for synapses in dataset_synapses:
+        set_cell_pairs = []
+        for synapse_key in list(synapses.keys()):
+            if not synapse_key in cell_pairs:
+                cell_pairs.append(synapse_key)
+            if not synapse_key in set_cell_pairs:
+                set_cell_pairs.append(synapse_key)
+            set_cell_pairs.sort()
+        dataset_cell_pairs.append(set_cell_pairs)
+    cell_pairs.sort()
+        
+    dataset_normal_maps = [dict() for i in range(0, len(dataset_bodies))]
+    for i in range(0, len(dataset_normal_maps)):
+        for cell_pair in cell_pairs:
+            dataset_normal_maps[i][cell_pair] = dict()
+    
+    super_dataset_known_positions = []
+    
+    for input_name in input_names:
+        dataset_known_positions, _ = pickle.load(open(input_name, 'rb'))
+        super_dataset_known_positions.append(dataset_known_positions)
+
+    # Intersect all sets of assignments, only keep identical assignments
+    dataset_assigned_positions = copy.deepcopy(super_dataset_known_positions[0])
+    
+    total_before = 0
+    for j in range(0, len(dataset_assigned_positions)):
+        for key in dataset_assigned_positions[j].keys():
+            for assignment in dataset_assigned_positions[j][key]:
+                total_before += 1
+                    
+    for i in range(0, len(input_names)):
+        for j in range(0, len(dataset_assigned_positions)):
+            for key in dataset_assigned_positions[j].keys():
+                for assignment in dataset_assigned_positions[j][key]:
+                    if not assignment in super_dataset_known_positions[i][j][key]:
+                        dataset_assigned_positions[j][key].remove(assignment)
+                        
+    total_after = 0
+    for j in range(0, len(dataset_assigned_positions)):
+        for key in dataset_assigned_positions[j].keys():
+            for assignment in dataset_assigned_positions[j][key]:
+                total_after += 1
+                
+    print('Intersection: '+str(total_after)+'/'+str(total_before))
+                
+    # Recompute normal maps
+    with Parallel(n_jobs=n_threads) as parallel:
+        norm_maps_updates = parallel(delayed(update_normal_maps)(sub_cell_pairs, hex_to_hex_offsets,\
+                                                                     dataset_assigned_positions, None,
+                                                                     dataset_sorted_synapses)\
+                                          for sub_cell_pairs in tools.split(cell_pairs, n_threads))
+    
+    for norm_maps_update in norm_maps_updates:
+        for set_id, update_key in norm_maps_update.keys():
+            dataset_normal_maps[set_id][update_key] = norm_maps_update[(set_id, update_key)]
+
+    pickle.dump((dataset_known_positions,  dataset_normal_maps), open(output_name, 'wb'), pickle.HIGHEST_PROTOCOL)
+
+
 # Returns the updated log_likelihood with the normal distribution with a 5% cutoff
 def norm_lpdf(dist, x, log_likelihood, min_prob=0.05):
     val = None
@@ -309,7 +391,7 @@ def norm_lpdf(dist, x, log_likelihood, min_prob=0.05):
         return log_likelihood + math.log(val)
 
 def update_normal_maps(cell_pairs, hex_to_hex_offsets, dataset_known_positions,
-                       dataset_assigned_positions, dataset_sorted_synapses):
+                       dataset_assigned_positions, dataset_sorted_synapses, count_zero=False):
     normal_map = dict()
     for i in range(0, len(dataset_known_positions)):
         for cell_pair in cell_pairs:
@@ -318,15 +400,30 @@ def update_normal_maps(cell_pairs, hex_to_hex_offsets, dataset_known_positions,
             for offset in hex_to_hex_offsets:
                 data[offset] = []
             # Collect data
-            sorted_synapses = dataset_sorted_synapses[i]
-            if cell_pair[0] in dataset_known_positions[i].keys():
-                for src_body in (dataset_known_positions[i][cell_pair[0]]+dataset_assigned_positions[i][cell_pair[0]]):
-                    if cell_pair[1] in dataset_known_positions[i].keys():
-                        for tar_body in (dataset_known_positions[i][cell_pair[1]]+dataset_assigned_positions[i][cell_pair[1]]):
-                            offset = (tar_body[3][0] - src_body[3][0], tar_body[3][1] - src_body[3][1])
-                            if offset in hex_to_hex_offsets:
-                                if ((src_body[1], tar_body[1]) in sorted_synapses.keys()):
-                                    data[offset].append(sorted_synapses[(src_body[1], tar_body[1])])
+            if not dataset_assigned_positions == None:
+                sorted_synapses = dataset_sorted_synapses[i]
+                if cell_pair[0] in dataset_known_positions[i].keys():
+                    for src_body in (dataset_known_positions[i][cell_pair[0]]+dataset_assigned_positions[i][cell_pair[0]]):
+                        if cell_pair[1] in dataset_known_positions[i].keys():
+                            for tar_body in (dataset_known_positions[i][cell_pair[1]]+dataset_assigned_positions[i][cell_pair[1]]):
+                                offset = (tar_body[3][0] - src_body[3][0], tar_body[3][1] - src_body[3][1])
+                                if offset in hex_to_hex_offsets:
+                                    if ((src_body[1], tar_body[1]) in sorted_synapses.keys()):
+                                        data[offset].append(sorted_synapses[(src_body[1], tar_body[1])])
+                                    elif count_zero:
+                                        data[offset].append(0.0)
+            else:
+                sorted_synapses = dataset_sorted_synapses[i]
+                if cell_pair[0] in dataset_known_positions[i].keys():
+                    for src_body in (dataset_known_positions[i][cell_pair[0]]):
+                        if cell_pair[1] in dataset_known_positions[i].keys():
+                            for tar_body in (dataset_known_positions[i][cell_pair[1]]):
+                                offset = (tar_body[3][0] - src_body[3][0], tar_body[3][1] - src_body[3][1])
+                                if offset in hex_to_hex_offsets:
+                                    if ((src_body[1], tar_body[1]) in sorted_synapses.keys()):
+                                        data[offset].append(sorted_synapses[(src_body[1], tar_body[1])])
+                                    elif count_zero:
+                                        data[offset].append(0.0)
 
             # At least 3 data sample needed to compute mu, std values
             for offset in hex_to_hex_offsets:
@@ -342,9 +439,42 @@ def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknow
     
     max_num_clusters = 5
     
+    # Fallback transforms generating affine transformation using cells of all types
+    fallback_transforms = [None for k in range(0, max_num_clusters)]
+    fallback_transform_weights = [0.0 for k in range(0, max_num_clusters)]
+    fallback_transform_total = 0
+    for label in range(0, max_num_clusters):
+        k_scoms = []
+        k_offsets = []
+        for key in known_positions.keys():
+            for k in range(0, len(known_positions[key])):
+                k_body = known_positions[key][k]
+                if not k_body[2] is None:
+                    for scom in k_body[2]:
+                        if scom[0] == label:
+                            k_scoms.append(np.asarray(scom)[1:4])
+                            k_offsets.append(np.asarray(list(hexgrid_reference.hex_to_cartesian(k_body[3]))+[0.0]))
+        for key in assigned_positions.keys():
+            for k in range(0, len(assigned_positions[key])):
+                k_body = assigned_positions[key][k]
+                if not k_body[2] is None:
+                    for scom in k_body[2]:
+                        if scom[0] == label:
+                            k_scoms.append(np.asarray(scom)[1:4])
+                            k_offsets.append(np.asarray(list(hexgrid_reference.hex_to_cartesian(k_body[3]))+[0.0]))
+        if len(k_scoms) > 3:             
+            fallback_transforms[label] = affine_transform.Affine_Fit(k_scoms, k_offsets)
+            fallback_transform_weights[label] = len(k_scoms)
+            fallback_transform_total += len(k_scoms)
+        
+    for label in range(0, max_num_clusters):
+        if fallback_transform_weights[label] > 0.0: 
+            fallback_transform_weights[label] /= float(fallback_transform_total)
+    
     assignment_picks = []
     for uk_type in uk_types:
         
+        # Specialized transform generating affine transformation using only the specific cell type of the unknown position
         transforms = [None for k in range(0, max_num_clusters)]
         transform_weights = [0.0 for k in range(0, max_num_clusters)]
         transform_total = 0
@@ -365,15 +495,23 @@ def update_assignment_picks(i, uk_types, hex_to_hex_offsets, normal_maps, unknow
                         if scom[0] == label:
                             k_scoms.append(np.asarray(scom)[1:4])
                             k_offsets.append(np.asarray(list(hexgrid_reference.hex_to_cartesian(k_body[3]))+[0.0]))
-            if len(k_scoms) > 2:             
+            if len(k_scoms) > 3:             
                 transforms[label] = affine_transform.Affine_Fit(k_scoms, k_offsets)
                 transform_weights[label] = len(k_scoms)
                 transform_total += len(k_scoms)
             
+        need_fallback = True
         for label in range(0, max_num_clusters):
-            if transform_weights[label] > 0: 
+            if not (transforms[label] is None or transforms[label] == False):
+                need_fallback = False
+            if transform_weights[label] > 0.0: 
                 transform_weights[label] /= float(transform_total)
-        
+                
+        # Check if we need to use fallback transforms instead
+        if need_fallback:
+            transforms = fallback_transforms
+            transform_weights = fallback_transform_weights
+            transform_total = fallback_transform_total        
         
         type_available_offsets = available_offsets[uk_type]
         cost_matrix = np.zeros((len(unknown_positions[uk_type]),len(type_available_offsets)))
@@ -872,25 +1010,44 @@ def generate_dvsc_model(template_nodes, template_edges, template_input_units, te
     with Parallel(n_jobs=n_threads) as parallel:
         normal_maps = dict()
         norm_maps_updates = parallel(delayed(update_normal_maps)(sub_cell_pairs, hex_to_hex_offsets,
-                                     [dataset_known_positions[j] for j in datasets_for_model],
-                                     [dataset_sorted_synapses[j] for j in datasets_for_model]) \
+                                     [dataset_known_positions[j] for j in datasets_for_model], None,
+                                     [dataset_sorted_synapses[j] for j in datasets_for_model], count_zero=True) \
                                      for sub_cell_pairs in tools.split(cell_pairs, n_threads))
         for norm_maps_update in norm_maps_updates:
             for update_key in norm_maps_update.keys():
-                normal_maps[update_key] = norm_maps_update[update_key]
+                if not update_key[1] in normal_maps.keys():
+                    normal_maps[update_key[1]] = [None for p in range(0, len(dataset_bodies))]
+                normal_maps[update_key[1]][update_key[0]] = norm_maps_update[update_key]
         
+    normal_maps_merged = dict()
+    
+    for i in range(0, len(datasets_for_model)):
+        for normal_map_key in list(normal_maps.keys()):
+            if not normal_map_key in normal_maps_merged.keys():
+                normal_maps_merged[normal_map_key] = dict()
+            normal_map = normal_maps[normal_map_key][i]
+            for offset in list(normal_map.keys()):
+                if not offset in normal_maps_merged[normal_map_key].keys() and not normal_map[offset] == None:
+                    normal_maps_merged[normal_map_key][offset] = normal_map[offset]
+                elif not normal_map[offset] == None:
+                    current_mu, current_sigma = normal_maps_merged[normal_map_key][offset]
+                    mu, sigma = normal_map[offset]
+                    if mu > current_mu:
+                        # Only take larger value
+                        normal_maps_merged[normal_map_key][offset] = (mu, sigma)
+
     avg_lmbd = 0.0
     avg_count = 0
     temp_edges = []
-    for normal_map_key in list(normal_maps.keys()):
-        normal_map = normal_maps[normal_map_key]
+    for normal_map_key in list(normal_maps_merged.keys()):
+        normal_map = normal_maps_merged[normal_map_key]
         cv = 0.0
         count = 0
         edge_offsets = []
         for offset in list(normal_map.keys()):
             if (not normal_map[offset] == None):
                 mu, sigma = normal_map[offset]
-                cv = cv + sigma/mu
+                cv = cv + (sigma/mu if mu > 0.0 else 0.0)
                 count = count + 1
                 edge_offsets.append((offset, mu))
         

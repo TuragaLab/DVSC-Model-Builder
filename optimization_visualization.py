@@ -9,7 +9,8 @@ from ipykernel.pickleutil import cell_type
 import model_builder
 
 
-def plot_normal_map_parallel(normal_map_keys, normal_maps, cartesian_micrometers, dataset_name, output_path):
+def plot_normal_map_parallel(plot_idx, n_datasets, normal_map_keys, normal_maps,
+                             cartesian_micrometers, dataset_name, output_path):
     mpldir = tempfile.mkdtemp()
     atexit.register(shutil.rmtree, mpldir)
     umask = os.umask(0)
@@ -36,12 +37,18 @@ def plot_normal_map_parallel(normal_map_keys, normal_maps, cartesian_micrometers
     # print(matplotlib.get_cachedir())
     # print(matplotlib.get_home())
     # print(matplotlib.get_data_path())
+    
+    dataset_range = [plot_idx-1] if plot_idx > 0 else [p for p in range(0, n_datasets)]
+    
         
     light_jet = matplotlib_tools.cmap_map(lambda x: x/2 + 0.5, matplotlib.cm.jet)
     
     for normal_map_key in normal_map_keys:
         normal_map = normal_maps[normal_map_key]
-        offsets = list(normal_map.keys())
+        offsets = list()
+        for dr in dataset_range:
+            new_offsets = list(normal_map[dr].keys())
+            offsets = offsets + list(set(new_offsets) - set(offsets))
         num_offsets = len(offsets)
         v_data = []
         u_data = []
@@ -51,16 +58,23 @@ def plot_normal_map_parallel(normal_map_keys, normal_maps, cartesian_micrometers
         for i in range(0, num_offsets):
             # Flip the offset to make them target centered instead of source centered (filter style)
             y, x = hexgrid_reference.hex_to_cartesian((-offsets[i][0],-offsets[i][1]))
-            if not normal_map[offsets[i]] == None:
-                mu, sigma = normal_map[offsets[i]]
-                if mu > 0.0 or sigma > 0.0:
-                    u_data.append(x*cartesian_micrometers) # Convert to micrometers
-                    v_data.append(y*cartesian_micrometers) # Convert to micrometers
-                    mu_data.append(mu)
-                    sigma_data.append(sigma)
-                    polygon = mpatches.RegularPolygon((u_data[-1], v_data[-1]), 6,
-                                                      radius=cartesian_micrometers/(2.0*math.cos(math.pi/5.0)), orientation=math.pi/2.0, zorder=0)
-                    patches.append(polygon)
+            for dr in dataset_range:
+                mu = 0.0
+                sigma = 0.0
+                if offsets[i] in normal_map[dr].keys() and not normal_map[dr][offsets[i]] == None:
+                    mu_temp, sigma_temp = normal_map[dr][offsets[i]]
+                    if mu_temp > mu:
+                        mu = mu_temp
+                        sigma = sigma_temp
+            if mu > 0.0 or sigma > 0.0:
+                u_data.append(x*cartesian_micrometers) # Convert to micrometers
+                v_data.append(y*cartesian_micrometers) # Convert to micrometers
+                mu_data.append(mu)
+                sigma_data.append(sigma)
+                polygon = mpatches.RegularPolygon((u_data[-1], v_data[-1]), 6,
+                                                   radius=cartesian_micrometers/(2.0*math.cos(math.pi/5.0)), orientation=math.pi/2.0, zorder=0)
+                patches.append(polygon)
+                
         num_valid_offsets = len(mu_data)
         fig, ax = plt.subplots(nrows=1, ncols=1, sharex=True, sharey=True, figsize=(6, 5))
         ax.axhline(0, color='gray', linewidth=0.5)
@@ -103,9 +117,9 @@ def plot_normal_map_results(input_name, output_path, dataset_bodies, dataset_syn
     cartesian_micrometers = 2.7918
 
     os.makedirs(output_path, exist_ok=True)
-    dataset_known_positions, normal_maps = pickle.load(open(input_name, 'rb'))
+    dataset_known_positions, _ = pickle.load(open(input_name, 'rb'))
     
-    hex_offsets = hexgrid_reference.hex_area(6)
+    hex_offsets = hexgrid_reference.hex_area(8)
     hex_to_hex_offsets = set()
     for hex_offset_1 in hex_offsets:
         for hex_offset_2 in hex_offsets:
@@ -137,12 +151,15 @@ def plot_normal_map_results(input_name, output_path, dataset_bodies, dataset_syn
         for i in range(0, len(dataset_known_positions)+1):
             normal_maps = dict()
             norm_maps_updates = parallel(delayed(model_builder.update_normal_maps)(sub_cell_pairs, hex_to_hex_offsets,
-                                        [dataset_known_positions[j] for j in (range(0, len(dataset_known_positions)) if i == 0 else [i-1])],
-                                        [dataset_sorted_synapses[j] for j in (range(0, len(dataset_sorted_synapses)) if i == 0 else [i-1])]) \
+                                        [dataset_known_positions[j] for j in (range(0, len(dataset_known_positions)) if i == 0 else [i-1])], None,
+                                        [dataset_sorted_synapses[j] for j in (range(0, len(dataset_sorted_synapses)) if i == 0 else [i-1])], count_zero=True) \
                                         for sub_cell_pairs in tools.split(cell_pairs, n_threads))
             for norm_maps_update in norm_maps_updates:
                 for update_key in norm_maps_update.keys():
-                    normal_maps[update_key] = norm_maps_update[update_key]
+                    if not update_key[1] in normal_maps.keys():
+                        normal_maps[update_key[1]] = [None for p in range(0, len(dataset_bodies) if i == 0 else 1)]
+                    normal_maps[update_key[1]][update_key[0]] = norm_maps_update[update_key]
+
 
             dataset_name = ''
             if i == 0:
@@ -153,7 +170,8 @@ def plot_normal_map_results(input_name, output_path, dataset_bodies, dataset_syn
             else:
                 dataset_name = dataset_names[i - 1]
             
-            parallel(delayed(plot_normal_map_parallel)(normal_map_keys, normal_maps, cartesian_micrometers, dataset_name, output_path) \
+            parallel(delayed(plot_normal_map_parallel)(i, len(dataset_bodies), normal_map_keys,
+                                                       normal_maps, cartesian_micrometers, dataset_name, output_path) \
                  for normal_map_keys in tools.split(list(normal_maps.keys()), n_threads))
         
         
@@ -201,7 +219,7 @@ def plot_cell_map_parallel(cell_types, dataset_known_positions, hex_offsets, car
             if cell_type in dataset_known_positions[i].keys():
                 known_positions = dataset_known_positions[i][cell_type]
                 for known_position in known_positions:
-                    allocated_offsets[i][known_position[2]] = 1 + (0 if (not known_position[2] in allocated_offsets[i].keys()) else allocated_offsets[i][known_position[2]])
+                    allocated_offsets[i][known_position[3]] = 1 + (0 if (not known_position[3] in allocated_offsets[i].keys()) else allocated_offsets[i][known_position[3]])
             
         dataset_patches = [[] for i in range(0,len(dataset_known_positions))]
         for i in range(0, len(dataset_known_positions)):
@@ -268,7 +286,7 @@ def plot_cell_map_results(input_name, output_path, dataset_bodies, dataset_names
             for cell_type in list(known_positions.keys()):
                 cell_types.add(cell_type)
         
-        hex_offsets = hexgrid_reference.hex_area(6)            
+        hex_offsets = hexgrid_reference.hex_area(8)            
         parallel(delayed(plot_cell_map_parallel)(cell_types, dataset_known_positions, hex_offsets, cartesian_micrometers,
                                                  dataset_bodies, dataset_names,output_path) \
                  for cell_types in tools.split(list(cell_types), n_threads))
