@@ -949,7 +949,7 @@ def get_node_pattern(cell_type, dataset_known_positions):
 def generate_dvsc_model(template_nodes, template_edges, template_input_units, template_output_units,
                         input_name, dataset_bodies, dataset_synapses,
                         datasets_for_pattern=[0], datasets_for_model=[0],
-                        n_threads=32):
+                        n_threads=32, synapse_count_threshold = 1.0):
     
     # Copy from templates
     nodes = copy.deepcopy(template_nodes) if not template_nodes == None else []
@@ -963,7 +963,9 @@ def generate_dvsc_model(template_nodes, template_edges, template_input_units, te
     cell_types = set()
     for known_positions in dataset_known_positions:
         for cell_type in list(known_positions.keys()):
-            if len(known_positions[cell_type]) > 0:
+            if len(known_positions[cell_type]) > 0 and \
+                    not cell_type in known_cell_types.cell_remap.keys() and \
+                    not cell_type in known_cell_types.cell_alias.keys():
                 cell_types.add(cell_type)
    
     for cell_type in list(cell_types):
@@ -971,7 +973,9 @@ def generate_dvsc_model(template_nodes, template_edges, template_input_units, te
     
     for known_positions in [dataset_known_positions[i] for i in datasets_for_model]:
         for cell_type in list(known_positions.keys()):
-            if len(known_positions[cell_type]) > 0:
+            if len(known_positions[cell_type]) > 0 and \
+                    not cell_type in known_cell_types.cell_remap.keys() and \
+                    not cell_type in known_cell_types.cell_alias.keys():
                 found = False
                 for node in nodes:
                     if node[0] == cell_type:
@@ -999,11 +1003,15 @@ def generate_dvsc_model(template_nodes, template_edges, template_input_units, te
     for synapses in dataset_synapses:
         set_cell_pairs = []
         for synapse_key in list(synapses.keys()):
-            if not synapse_key in cell_pairs:
-                cell_pairs.append(synapse_key)
-            if not synapse_key in set_cell_pairs:
-                set_cell_pairs.append(synapse_key)
-            set_cell_pairs.sort()
+            if not synapse_key[0] in known_cell_types.cell_remap.keys() and \
+               not synapse_key[0] in known_cell_types.cell_alias.keys() and \
+               not synapse_key[1] in known_cell_types.cell_remap.keys() and \
+               not synapse_key[1] in known_cell_types.cell_alias.keys():
+                if not synapse_key in cell_pairs:
+                    cell_pairs.append(synapse_key)
+                if not synapse_key in set_cell_pairs:
+                    set_cell_pairs.append(synapse_key)
+                set_cell_pairs.sort()
         dataset_cell_pairs.append(set_cell_pairs)
     cell_pairs.sort()
     
@@ -1084,16 +1092,37 @@ def generate_dvsc_model(template_nodes, template_edges, template_input_units, te
         if found == False:
             edges.append(temp_edge)
             
-    # Prune edges with zero weight
+    # Prune nodes from prune list
+    remove_nodes = []
+    for i in range(0, len(nodes)):
+        if nodes[i][0] in known_cell_types.cell_prune:
+            remove_nodes.append(nodes[i])
+    for node in remove_nodes:
+        nodes.remove(node)
+            
+    # Remove edges with:
+    # a.) Pruned post or presynaptic neurons
+    # b.) Edges with no offsets
+    # c.) Edges that are autapses
+    # d.) Edges below theshold value to consider them more than noise
     remove_edges = []
     for i in range(0, len(edges)):
         new_edge_offsets = []
         for edge_offset in edges[i][2]:
-            if not edge_offset[1] == 0.0:
+            # Only consider edges above threshold that are not autapses
+            if abs(edge_offset[1]) >= synapse_count_threshold and not ((edge_offset[0] == (0, 0) or edge_offset[0] == (0.0, 0.0)) and edges[i][0] == edges[i][1]):
                 new_edge_offsets.append(edge_offset)
         edges[i] = (edges[i][0], edges[i][1], new_edge_offsets,
                     edges[i][3], edges[i][4])
-        if len(new_edge_offsets) == 0:
+        found_pre = False
+        found_post = False
+        for j in range(0, len(nodes)):
+            if edges[i][0] == nodes[j][0]:
+                found_pre = True
+            if edges[i][1] == nodes[j][0]:
+                found_post = True
+
+        if len(new_edge_offsets) == 0 or not found_pre or not found_post:
             remove_edges.append(edges[i])
     # Remove empty edges
     for edge in remove_edges:

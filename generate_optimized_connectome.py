@@ -16,18 +16,18 @@ def main():
         
     # Optimize
     # model_builder.optimize_neuron_positions(dataset_bodies, dataset_synapses, 'output/optimized_cell_positions.pickle')
-        
-    # model_builder.intersect_neuron_positions(dataset_bodies, dataset_synapses, ['output/optimized_cell_positions_benchmark_0.pickle',
-    #                                                                             'output/optimized_cell_positions_benchmark_1.pickle'],
-    #                                                                             'output/optimized_cell_positions_intersected.pickle')
+    
+    model_builder.intersect_neuron_positions(dataset_bodies, dataset_synapses, ['output/optimized_cell_positions_benchmark_0.pickle',
+                                                                                'output/optimized_cell_positions_benchmark_1.pickle'],
+                                                                                'output/optimized_cell_positions_intersected.pickle')
 
     # Generate graphics
     # optimization_visualization.plot_normal_map_results('output/optimized_cell_positions_intersected.pickle', 'output/optimizer/',
     #                                                    dataset_bodies, dataset_synapses, [datasets[0][3], datasets[1][3]])
-    optimization_visualization.plot_cell_map_results('output/optimized_cell_positions_intersected.pickle', 'output/optimizer/',
-                                                     dataset_bodies, [datasets[0][3], datasets[1][3]])
-    synapse_position_visualization.plot_synapse_positions('output/optimized_cell_positions_intersected.pickle', 'output/optimizer/',
-                                                          dataset_bodies, dataset_synapses, [datasets[0][3], datasets[1][3]], short_legend=True)
+    #optimization_visualization.plot_cell_map_results('output/optimized_cell_positions_intersected.pickle', 'output/optimizer/',
+    #                                                 dataset_bodies, [datasets[0][3], datasets[1][3]])
+    #synapse_position_visualization.plot_synapse_positions('output/optimized_cell_positions_intersected.pickle', 'output/optimizer/',
+    #                                                      dataset_bodies, dataset_synapses, [datasets[0][3], datasets[1][3]], short_legend=True)
 
 
     # Generate model

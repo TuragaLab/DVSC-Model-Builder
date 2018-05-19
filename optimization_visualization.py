@@ -5,7 +5,6 @@ import pickle
 from joblib import Parallel, delayed
 import hexgrid_reference
 import tools
-from ipykernel.pickleutil import cell_type
 import model_builder
 
 

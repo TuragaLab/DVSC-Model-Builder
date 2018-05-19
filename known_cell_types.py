@@ -139,3 +139,18 @@ cell_remap['Tm4'] = ['Tm4-ant', 'Tm4-post']
 cell_modifiers = dict()
 cell_modifiers['ant'] = '-ant'
 cell_modifiers['post'] = '-post'
+
+
+# Cells currently excluded from the model
+cell_prune = []
+for i in range(0, 25):
+    # Remove all Pm cells
+    cell_prune.append('Pm'+str(i))
+    cell_prune.append('Pm'+str(i)+'a')
+    cell_prune.append('Pm'+str(i)+'b')
+    # Remove all Dm cells
+    cell_prune.append('Dm'+str(i))
+    # Remove all Mt cells
+    cell_prune.append('Mt'+str(i))
+
+

@@ -153,30 +153,28 @@ edges.append(('C3', 'L1', [((0, 0), 6.0)], -1.0, 1.0))
 edges.append(('C3', 'L3', [((0, 0), 1.0)], -1.0, 1.0))
 edges.append(('C3', 'Am', [((0, 0), 22.0)], -1.0, 1.0))
 
-lawf2_lamina_range = [(-3,-1),(-2,-1),(-1,-1),(0,-1),(1,-1),(2,-1),(3,-1),
-                      (-3,0),(-2,0),(-1,0),(0,0),(1,0),(2,0),(3,0),
-                      (-4,1),(-3,1),(-2,1),(-1,1),(0,1),(1,1),(2,1),
-                      (-4,2),(-3,2),(-2,2),(-1,2),(0,2),(1,2),(2,2)]
+lawf2_lamina_range = [(-4,-1),(-3,-1),(-2,-1),(-1,-1),(0,-1),(1,-1),(2,-1),(3,-1),(4,-1),
+                      (-4,0),(-3,0),(-2,0),(-1,0),(0,0),(1,0),(2,0),(3,0),(4,0),
+                      (-5,1),(-4,1),(-3,1),(-2,1),(-1,1),(0,1),(1,1),(2,1),(3,1)]
 
 # Tuthill 2014 (LAWF); "It is likely that wide-field neurons form synapses on most cell types in the lamina [...] high [...] on Am and L3"
-# Lawf most likely inhibitory
 # Lawf --> R1, R2, R3, R4, R6, L1, L2, L3, L5, Am, T1, C2, C3, Lawf
 # Lawf2 range (distributed to ~5 processes of Lawf2 cells)
-edges.append(('Lawf2', 'Lawf2', list(zip(lawf2_lamina_range, [7.0/5.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'R1', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'R2', list(zip(lawf2_lamina_range, [3.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'R3', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'R4', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'R5', list(zip(lawf2_lamina_range, [0.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'R6', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'L1', list(zip(lawf2_lamina_range, [2.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'L2', list(zip(lawf2_lamina_range, [9.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'L3', list(zip(lawf2_lamina_range, [21.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'L5', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'Am', list(zip(lawf2_lamina_range, [36.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'T1', list(zip(lawf2_lamina_range, [6.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'C2', list(zip(lawf2_lamina_range, [6.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
-edges.append(('Lawf2', 'C3', list(zip(lawf2_lamina_range, [2.0/11.0 for o in lawf2_lamina_range])), -1.0, 1.0))
+edges.append(('Lawf2', 'Lawf2', list(zip(lawf2_lamina_range, [7.0/5.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'R1', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'R2', list(zip(lawf2_lamina_range, [3.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'R3', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'R4', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'R5', list(zip(lawf2_lamina_range, [0.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'R6', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'L1', list(zip(lawf2_lamina_range, [2.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'L2', list(zip(lawf2_lamina_range, [9.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'L3', list(zip(lawf2_lamina_range, [21.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'L5', list(zip(lawf2_lamina_range, [1.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'Am', list(zip(lawf2_lamina_range, [36.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'T1', list(zip(lawf2_lamina_range, [6.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'C2', list(zip(lawf2_lamina_range, [6.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
+edges.append(('Lawf2', 'C3', list(zip(lawf2_lamina_range, [2.0/11.0 for o in lawf2_lamina_range])), 1.0, 1.0))
 
 # Hypothesis 1: L1/L2 connect to Lawf2 in the M1 layer
 edges.append(('L1', 'Lawf2', list(zip(hex_areas[3], [5.0 for o in hex_areas[3]])), 1.0, 1.0))
