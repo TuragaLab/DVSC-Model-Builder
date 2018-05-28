@@ -7,6 +7,8 @@ known_neuron_patterns = dict()
 # Innervation in medulla: M1 127 cartridges (hexagon sidelength 7), M8-10 19 cartridges (hexagon sidelength 3)
 known_neuron_patterns['Lawf2'] = ('stride', (3, 2))
 
+known_neuron_patterns['Lawf1'] = ('stride', (3, 2))
+
 # Nern 2015
 # 750 columns
 

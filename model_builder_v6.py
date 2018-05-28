@@ -30,7 +30,6 @@ from sklearn.decomposition import PCA
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d import proj3d
 import affine_transform
-import model_base
 
 
 class Arrow3D(FancyArrowPatch):
@@ -945,7 +944,6 @@ def generate_dvsc_model(template_nodes, template_edges, template_input_units, te
     # Copy from templates
     nodes = copy.deepcopy(template_nodes) if not template_nodes == None else []
     edges = copy.deepcopy(template_edges) if not template_edges == None else []
-    
     input_units = copy.deepcopy(template_input_units) if not template_input_units == None else []
     output_units = copy.deepcopy(template_output_units) if not template_output_units == None else []
 
@@ -970,11 +968,10 @@ def generate_dvsc_model(template_nodes, template_edges, template_input_units, te
                     not cell_type in known_cell_types.cell_alias.keys():
                 found = False
                 for node in nodes:
-                    if node.name == cell_type:
+                    if node[0] == cell_type:
                         found = True
                 if not found:
-                    nodes.append(model_base.Node(name=cell_type, pattern=cell_patterns[cell_type],
-                                                 activation='relu', bias=3.5))
+                    nodes.append((cell_type, cell_patterns[cell_type], 'relu', 3.5))
         
     hex_offsets = hexgrid_reference.hex_area(6)
     hex_to_hex_offsets = set()
@@ -1060,50 +1057,35 @@ def generate_dvsc_model(template_nodes, template_edges, template_input_units, te
             avg_count = avg_count + 1
 
         if count > 0:
-            alpha, alpha_fixed, alpha_references = known_synapse_signs.get_sign(normal_map_key[0], normal_map_key[1])
-            temp_edges.append(model_base.Edge(src=normal_map_key[0],
-                                              tar=normal_map_key[1],
-                                              offsets=edge_offsets,
-                                              alpha=alpha, alpha_fixed=alpha_fixed, alpha_references=alpha_references,
-                                              lambda_mult=lmbd))
+            temp_edges.append((normal_map_key[0], normal_map_key[1], edge_offsets,
+                               known_synapse_signs.get_sign(normal_map_key[0], normal_map_key[1]),
+                               lmbd))
           
     avg_lmbd = avg_lmbd / float(avg_count)
     
     # Rewrite edges, add lambda if necessary (< 3 observations and cv > 0.0)
     for i in range(0, len(temp_edges)):
-        temp_edges[i].lambda_mult = avg_lmbd if temp_edges[i].lambda_mult == None else temp_edges[i].lambda_mult
+        temp_edges[i] = (temp_edges[i][0], temp_edges[i][1], temp_edges[i][2],
+                         temp_edges[i][3], avg_lmbd if temp_edges[i][4] == None else temp_edges[i][4])
     
     # Rewrite template edges with new alpha and lambda, prune edges with zero weight
     for i in range(0, len(edges)):
-        edges[i].alpha, edges[i].alpha_fixed, edges[i].alpha_references = known_synapse_signs.get_sign(edges[i].src, edges[i].tar)
-        edges[i].lambda_mult = avg_lmbd
+        edges[i] = (edges[i][0], edges[i][1], edges[i][2],
+                    known_synapse_signs.get_sign(edges[i][0], edges[i][1]),
+                    avg_lmbd)
     
     for temp_edge in temp_edges:
         found = False
         for edge in edges:
-            if (temp_edge.src == edge.src and temp_edge.tar == edge.tar and temp_edge.edge_type == edge.edge_type):
-                # Edge exists, test offsets
+            if (temp_edge[0] == edge[0] and temp_edge[1] == edge[1]):
                 found = True
-                for i in range(0, len(temp_edge.offsets)):
-                    offset_found = False
-                    for j in range(0, len(edge.offsets)):
-                        # print(temp_edge.offsets[i][0])
-                        # print(edge.src, edge.tar, edge.offsets)
-                        if temp_edge.offsets[i][0][0] == edge.offsets[j][0][0] and temp_edge.offsets[i][0][1] == edge.offsets[j][0][1]:
-                            # Offset exists, take larger number
-                            edge.offsets[j] = (edge.offsets[j][0], max(temp_edge.offsets[i][1],  edge.offsets[j][1]))
-                            offset_found = True
-                            break
-                    if not offset_found:
-                        edge.offsets.append(temp_edge.offsets[i])
         if found == False:
-            # This is a completely new edge
             edges.append(temp_edge)
             
     # Prune nodes from prune list
     remove_nodes = []
     for i in range(0, len(nodes)):
-        if nodes[i].name in known_cell_types.cell_prune:
+        if nodes[i][0] in known_cell_types.cell_prune:
             remove_nodes.append(nodes[i])
     for node in remove_nodes:
         nodes.remove(node)
@@ -1118,15 +1100,16 @@ def generate_dvsc_model(template_nodes, template_edges, template_input_units, te
         new_edge_offsets = []
         for edge_offset in edges[i][2]:
             # Only consider edges above threshold that are not autapses
-            if abs(edge_offset[1]) >= synapse_count_threshold and not ((edge_offset[0] == (0, 0) or edge_offset[0] == (0.0, 0.0)) and edges[i].src == edges[i].tar):
+            if abs(edge_offset[1]) >= synapse_count_threshold and not ((edge_offset[0] == (0, 0) or edge_offset[0] == (0.0, 0.0)) and edges[i][0] == edges[i][1]):
                 new_edge_offsets.append(edge_offset)
-        edges[i].offsets = new_edge_offsets
+        edges[i] = (edges[i][0], edges[i][1], new_edge_offsets,
+                    edges[i][3], edges[i][4])
         found_pre = False
         found_post = False
         for j in range(0, len(nodes)):
-            if edges[i].src == nodes[j][0]:
+            if edges[i][0] == nodes[j][0]:
                 found_pre = True
-            if edges[i].tar == nodes[j][0]:
+            if edges[i][1] == nodes[j][0]:
                 found_post = True
 
         if len(new_edge_offsets) == 0 or not found_pre or not found_post:
@@ -1140,7 +1123,7 @@ def generate_dvsc_model(template_nodes, template_edges, template_input_units, te
     for i in range(0, len(nodes)):
         found = False
         for j in range(0, len(edges)):
-            if nodes[i].name == edges[j].src or nodes[i].name == edges[j].tar:
+            if nodes[i][0] == edges[j][0] or nodes[i][0] == edges[j][1]:
                 found = True
                 break
         if not found:
@@ -1150,3 +1133,45 @@ def generate_dvsc_model(template_nodes, template_edges, template_input_units, te
         nodes.remove(node)
     
     return nodes, edges, input_units, output_units
+    
+# Create the DVSC specification for the new simulation
+def write_dvsc_model(output_pickle, output_name, nodes, edges, input_units, output_units):
+    if (output_pickle):
+        # Pickle serialize
+        pickle.dump((nodes, edges, input_units, output_units), open(output_name, 'wb'), pickle.HIGHEST_PROTOCOL)
+    else:
+        # Text serialize to active python code
+        file = open(output_name, 'w')
+        text = '# Python active code serialized model\n'
+        text = text + '################################################################################\n'
+        text = text + '# Input units\n'
+        text = text + 'input_units = ['
+        for i in range(0, len(input_units)):
+            text = text + '\'' + input_units[i] + '\''
+            if i < len(input_units)-1:
+                text = text + ', '
+        text = text + ']\n'
+        
+        text = text + '################################################################################\n'
+        text = text + '# Output units\n'
+        text = text +'output_units = ['
+        for i in range(0, len(output_units)):
+            text = text + '\'' + output_units[i] + '\''
+            if i < len(output_units)-1:
+                text = text + ', '
+        text = text + ']\n'
+        
+        text = text + '################################################################################\n'
+        text = text + '# Nodes\n'
+        text = text + 'nodes = []\n'
+        for node in nodes:
+            text = text + 'nodes.append(' + str(node) + ')\n'
+        
+        text = text + '################################################################################\n'
+        text = text + '# Edges\n'
+        text = text + 'edges = []\n'
+        for edge in edges:
+            text = text + 'edges.append(' + str(edge) + ')\n'
+            
+        file.write(text)
+        file.close()

@@ -1,7 +1,8 @@
 import model_builder
 import optimization_visualization
 import synapse_position_visualization
-import model_template_v0
+import model_template
+import model_base
 
 def main():
     datasets = []
@@ -32,20 +33,20 @@ def main():
 
     # Generate model
     nodes, edges, input_units, output_units = model_builder.generate_dvsc_model(
-        model_template_v0.nodes, model_template_v0.edges, model_template_v0.input_units, model_template_v0.output_units,
+        model_template.nodes, model_template.edges, model_template.input_units, model_template.output_units,
         'output/optimized_cell_positions_intersected.pickle', dataset_bodies, dataset_synapses,
         datasets_for_pattern=[0,1], datasets_for_model=[0,1])
 
-    model_builder.write_dvsc_model(True, 'output/model_FIB25_FIB19.pickle', nodes, edges, input_units, output_units)
-    model_builder.write_dvsc_model(False, 'output/model_FIB25_FIB19.py', nodes, edges, input_units, output_units)
+    model_base.serialize('output/model_FIB25_FIB19.pickle', output_pickle=True, nodes=nodes, edges=edges, input_units=input_units, output_units=output_units)
+    model_base.serialize('output/model_FIB25_FIB19.py', output_pickle=False, nodes=nodes, edges=edges, input_units=input_units, output_units=output_units)
     
     nodes, edges, input_units, output_units = model_builder.generate_dvsc_model(
-        model_template_v0.nodes, model_template_v0.edges, model_template_v0.input_units, model_template_v0.output_units,
+        model_template.nodes, model_template.edges, model_template.input_units, model_template.output_units,
         'output/optimized_cell_positions_intersected.pickle', dataset_bodies, dataset_synapses,
         datasets_for_pattern=[0], datasets_for_model=[0])
 
-    model_builder.write_dvsc_model(True, 'output/model_FIB25.pickle', nodes, edges, input_units, output_units)
-    model_builder.write_dvsc_model(False, 'output/model_FIB25.py', nodes, edges, input_units, output_units)
+    model_base.serialize('output/model_FIB25.pickle', output_pickle=True, nodes=nodes, edges=edges, input_units=input_units, output_units=output_units)
+    model_base.serialize('output/model_FIB25.py', output_pickle=False, nodes=nodes, edges=edges, input_units=input_units, output_units=output_units)
 
 if __name__ == "__main__":
     main()

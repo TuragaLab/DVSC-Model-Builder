@@ -58,6 +58,7 @@ nodes.append(('L5', ('stride', (1, 1)), 'relu', 3.5))
 # Innervation in lamina: 28 cartridges, skewed along dorsal-ventral (A-P: 4, D-V: 7)
 # Innervation in medulla: M1 127 cartridges (hexagon sidelength 7), M8-10 19 cartridges (hexagon sidelength 3)
 nodes.append(('Lawf2', ('stride', (3, 2)), 'relu', 3.5))
+nodes.append(('Lawf1', ('stride', (3, 2)), 'relu', 3.5))
 
 # Amacrine cell
 nodes.append(('Am', ('stride', (1, 1)), 'relu', 3.5))
