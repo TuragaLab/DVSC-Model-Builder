@@ -13,7 +13,7 @@ def main():
     neuron_list = []
     num_nodes = 0
     for src_node in nodes:
-        if not src_node.name == 'CT1G' or src_node.name == 'CT1L':
+        if not src_node.name == 'CT1G' and not src_node.name == 'CT1L':
             neuron_list.append(src_node.name)
             num_nodes += 1
     
@@ -24,11 +24,11 @@ def main():
         
     i = 0
     for src_node in nodes:
-        if not src_node.name == 'CT1G' or src_node.name == 'CT1L':
+        if not src_node.name == 'CT1G' and not src_node.name == 'CT1L':
             row = [src_node.name]
             j = 0
             for tar_node in nodes:
-                if not tar_node.name == 'CT1G' or src_node.name == 'CT1L':
+                if not tar_node.name == 'CT1G' and not  tar_node.name == 'CT1L':
                     for edge in model_data['edges']:
                         if src_node.name == edge.src and tar_node.name == edge.tar:
                             for offset in edge.offsets:
