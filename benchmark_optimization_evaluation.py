@@ -109,7 +109,7 @@ def main():
         count_correct[j][0] = (known_position_count-(known_position_count/10)*j)#/total_position_count * 100.0
 
     print(count_correct)
-    plt.figure(figsize=(8, 4.5))
+    plt.figure(figsize=(6, 6))
     plt.plot(xlabels, count_correct)
     ax = plt.axes()
     plt.legend(['Reference positions', 'Combined', 'FIB-25', 'FIB-19', 'Combined (annotated)', 'FIB-25 (annotated)', 'FIB-19 (annotated)'])
