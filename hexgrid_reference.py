@@ -103,6 +103,9 @@ def yrotate_offset(offset):
 hex_to_cartesian_R = math.sqrt(2.0/math.sqrt(3.0))*np.asarray([[1.0,0.5],[0.0,math.sqrt(3.0)/2.0]])
 cartesian_to_hex_R = np.linalg.inv(hex_to_cartesian_R)
 
+#print(hex_to_cartesian_R)
+#print(cartesian_to_hex_R)
+
 # (y,x) -> (v,u)
 def hex_to_cartesian(offset):
     return (hex_to_cartesian_R[0][0] * offset[0] + hex_to_cartesian_R[0][1] * offset[1],
